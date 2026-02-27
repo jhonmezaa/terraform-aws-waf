@@ -9,7 +9,7 @@ variable "create" {
 }
 
 variable "account_name" {
-  description = "Account name for resource naming."
+  description = "Account name for resource naming (e.g., 'prod', 'staging', 'dev')."
   type        = string
 
   validation {
@@ -19,12 +19,12 @@ variable "account_name" {
 
   validation {
     condition     = can(regex("^[a-z0-9-]+$", var.account_name))
-    error_message = "account_name can only contain lowercase letters, numbers and hyphens."
+    error_message = "account_name can only contain lowercase letters, numbers, and hyphens."
   }
 }
 
 variable "project_name" {
-  description = "Project name for resource naming."
+  description = "Project name for resource naming (e.g., 'myapp', 'api-service')."
   type        = string
 
   validation {
@@ -34,7 +34,7 @@ variable "project_name" {
 
   validation {
     condition     = can(regex("^[a-z0-9-]+$", var.project_name))
-    error_message = "project_name can only contain lowercase letters, numbers and hyphens."
+    error_message = "project_name can only contain lowercase letters, numbers, and hyphens."
   }
 }
 
@@ -57,709 +57,220 @@ variable "tags" {
 }
 
 # =============================================================================
-# WAF Web ACL Configuration
+# Web ACL Configuration
 # =============================================================================
 
-variable "description" {
-  description = "A friendly description of the WebACL."
-  type        = string
-  default     = "Managed by Terraform"
-}
+variable "web_acls" {
+  description = <<-EOT
+    Map of Web ACL configurations to create.
+    Each key becomes part of the resource name: {region_prefix}-waf-{account_name}-{project_name}-{key}
+  EOT
 
-variable "scope" {
-  description = "Specifies whether this is for a CloudFront distribution or regional application. Values: CLOUDFRONT, REGIONAL."
-  type        = string
-  default     = "REGIONAL"
-  nullable    = false
-
-  validation {
-    condition     = contains(["CLOUDFRONT", "REGIONAL"], var.scope)
-    error_message = "Allowed values: CLOUDFRONT, REGIONAL."
-  }
-}
-
-variable "default_action" {
-  description = "Specifies the default action for the WebACL. Possible values: allow, block."
-  type        = string
-  default     = "block"
-  nullable    = false
-
-  validation {
-    condition     = contains(["allow", "block"], var.default_action)
-    error_message = "Allowed values: allow, block."
-  }
-}
-
-variable "default_block_response" {
-  description = "HTTP response code for the default block action. Only used when default_action is block."
-  type        = number
-  default     = null
-}
-
-variable "default_block_custom_response_body_key" {
-  description = "References a key defined in custom_response_body for the default block action."
-  type        = string
-  default     = null
-}
-
-variable "token_domains" {
-  description = "Specifies the domains that AWS WAF should accept in a web request token."
-  type        = list(string)
-  default     = null
-}
-
-variable "visibility_config" {
-  description = "Defines and enables Amazon CloudWatch metrics and web request sample collection."
-  type = object({
-    cloudwatch_metrics_enabled = bool
-    metric_name                = string
-    sampled_requests_enabled   = bool
-  })
-  nullable = false
-}
-
-variable "custom_response_body" {
-  description = "Defines custom response bodies that can be referenced by custom_response actions."
   type = map(object({
-    content      = string
-    content_type = string
-  }))
-  default  = {}
-  nullable = false
-}
+    scope                           = optional(string, "REGIONAL")
+    description                     = optional(string, "Managed by Terraform")
+    default_action                  = optional(string, "block")
+    default_block_response_code     = optional(number)
+    default_block_response_body_key = optional(string)
+    token_domains                   = optional(list(string))
 
-# =============================================================================
-# Managed Rule Group Statement Rules
-# =============================================================================
+    custom_response_body = optional(map(object({
+      content      = string
+      content_type = string
+    })), {})
 
-variable "managed_rule_group_statement_rules" {
-  description = "A list of managed rule group statement rules."
-  type = list(object({
-    name            = string
-    priority        = number
-    override_action = optional(string)
-    captcha_config = optional(object({
-      immunity_time_property = object({
-        immunity_time = number
-      })
-    }), null)
-    rule_label = optional(list(string), null)
-    statement = object({
-      name                             = string
-      vendor_name                      = string
-      version                          = optional(string)
-      scope_down_not_statement_enabled = optional(bool, false)
-      scope_down_statement = optional(object({
-        byte_match_statement = object({
-          positional_constraint = string
-          search_string         = string
-          field_to_match = object({
-            all_query_arguments   = optional(bool)
-            body                  = optional(bool)
-            method                = optional(bool)
-            query_string          = optional(bool)
-            single_header         = optional(object({ name = string }))
-            single_query_argument = optional(object({ name = string }))
-            uri_path              = optional(bool)
-          })
-          text_transformation = list(object({
-            priority = number
-            type     = string
-          }))
-        })
-      }), null)
-      rule_action_override = optional(map(object({
-        action = string
-        custom_request_handling = optional(object({
-          insert_header = object({
-            name  = string
-            value = string
-          })
-        }), null)
-        custom_response = optional(object({
-          response_code            = string
-          custom_response_body_key = optional(string)
-          response_header = optional(object({
-            name  = string
-            value = string
-          }), null)
-        }), null)
-      })), null)
-      managed_rule_group_configs = optional(list(object({
-        aws_managed_rules_anti_ddos_rule_set = optional(object({
-          sensitivity_to_block = optional(string)
-          client_side_action_config = optional(object({
-            challenge = object({
-              usage_of_action = string
-              sensitivity     = optional(string)
-              exempt_uri_regular_expression = optional(list(object({
-                regex_string = string
-              })))
-            })
-          }))
-        }))
-        aws_managed_rules_bot_control_rule_set = optional(object({
-          inspection_level        = string
-          enable_machine_learning = optional(bool, true)
-        }), null)
-        aws_managed_rules_atp_rule_set = optional(object({
-          enable_regex_in_path = optional(bool)
-          login_path           = string
-          request_inspection = optional(object({
-            payload_type = string
-            password_field = object({
-              identifier = string
-            })
-            username_field = object({
-              identifier = string
-            })
-          }), null)
-          response_inspection = optional(object({
-            body_contains = optional(object({
-              success_strings = list(string)
-              failure_strings = list(string)
-            }), null)
-            header = optional(object({
-              name           = string
-              success_values = list(string)
-              failure_values = list(string)
-            }), null)
-            json = optional(object({
-              identifier     = string
-              success_values = list(string)
-              failure_values = list(string)
-            }), null)
-            status_code = optional(object({
-              success_codes = list(string)
-              failure_codes = list(string)
-            }), null)
-          }), null)
-        }), null)
-        aws_managed_rules_acfp_rule_set = optional(object({
-          creation_path          = string
-          enable_regex_in_path   = optional(bool)
-          registration_page_path = string
-          request_inspection = optional(object({
-            payload_type = string
-            password_field = optional(object({
-              identifier = string
-            }), null)
-            username_field = optional(object({
-              identifier = string
-            }), null)
-            email_field = optional(object({
-              identifier = string
-            }), null)
-            address_fields = optional(object({
-              identifiers = list(string)
-            }), null)
-            phone_number_fields = optional(object({
-              identifiers = list(string)
-            }), null)
-          }), null)
-          response_inspection = optional(object({
-            body_contains = optional(object({
-              success_strings = list(string)
-              failure_strings = list(string)
-            }), null)
-            header = optional(object({
-              name           = string
-              success_values = list(string)
-              failure_values = list(string)
-            }), null)
-            json = optional(object({
-              identifier     = string
-              success_values = list(string)
-              failure_values = list(string)
-            }), null)
-            status_code = optional(object({
-              success_codes = list(string)
-              failure_codes = list(string)
-            }), null)
-          }), null)
-        }))
-      })), null)
+    # Rules use 'any' type because WAF rules contain heterogeneous statement types
+    # (managed_rule_group_statement, ip_set_reference_statement, byte_match_statement, etc.)
+    # that cannot be unified in a typed list. Each rule should contain:
+    #   name, priority, action/override_action, one statement type, visibility_config
+    rules = optional(any, [])
+
+    visibility_config = object({
+      cloudwatch_metrics_enabled = bool
+      metric_name                = string
+      sampled_requests_enabled   = bool
     })
-    visibility_config = optional(object({
-      cloudwatch_metrics_enabled = optional(bool)
-      metric_name                = string
-      sampled_requests_enabled   = optional(bool)
-    }), null)
-  }))
-  default = null
-}
 
-# =============================================================================
-# Rate Based Statement Rules
-# =============================================================================
-
-variable "rate_based_statement_rules" {
-  description = "A list of rate-based rules."
-  type = list(object({
-    name     = string
-    priority = number
-    action   = string
     captcha_config = optional(object({
-      immunity_time_property = object({
-        immunity_time = number
-      })
-    }), null)
-    rule_label = optional(list(string), null)
-    custom_response = optional(object({
-      response_code            = string
-      custom_response_body_key = optional(string, null)
-      response_header = optional(object({
-        name  = string
-        value = string
-      }), null)
-    }), null)
-    statement = object({
-      limit                 = number
-      aggregate_key_type    = string
-      evaluation_window_sec = optional(number)
-      forwarded_ip_config = optional(object({
-        fallback_behavior = string
-        header_name       = string
-      }), null)
-      custom_key = optional(list(object({
-        ip = optional(object({}), null)
-        header = optional(object({
-          name = string
-          text_transformation = list(object({
-            priority = number
-            type     = string
-          }))
-        }), null)
-      })), null)
-      scope_down_statement = optional(object({
-        byte_match_statement = object({
-          positional_constraint = string
-          search_string         = string
-          field_to_match = object({
-            all_query_arguments   = optional(bool)
-            body                  = optional(bool)
-            method                = optional(bool)
-            query_string          = optional(bool)
-            single_header         = optional(object({ name = string }))
-            single_query_argument = optional(object({ name = string }))
-            uri_path              = optional(bool)
-          })
-          text_transformation = list(object({
-            priority = number
-            type     = string
-          }))
-        })
-      }), null)
-    })
-    visibility_config = optional(object({
-      cloudwatch_metrics_enabled = optional(bool)
-      metric_name                = string
-      sampled_requests_enabled   = optional(bool)
-    }), null)
+      immunity_time = number
+    }))
+
+    challenge_config = optional(object({
+      immunity_time = number
+    }))
+
+    association_config = optional(object({
+      request_body = optional(map(object({
+        default_size_inspection_limit = string
+      })))
+    }))
   }))
-  default = null
+
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for k, v in var.web_acls : contains(["REGIONAL", "CLOUDFRONT"], v.scope)
+    ])
+    error_message = "Web ACL scope must be either 'REGIONAL' or 'CLOUDFRONT'."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.web_acls : contains(["allow", "block"], v.default_action)
+    ])
+    error_message = "Web ACL default_action must be either 'allow' or 'block'."
+  }
 }
 
 # =============================================================================
-# Byte Match Statement Rules
-# =============================================================================
-
-variable "byte_match_statement_rules" {
-  description = "A list of byte match statement rules."
-  type = list(object({
-    name     = string
-    priority = number
-    action   = string
-    captcha_config = optional(object({
-      immunity_time_property = object({
-        immunity_time = number
-      })
-    }), null)
-    rule_label = optional(list(string), null)
-    custom_response = optional(object({
-      response_code            = string
-      custom_response_body_key = optional(string, null)
-      response_header = optional(object({
-        name  = string
-        value = string
-      }), null)
-    }), null)
-    statement = any
-    visibility_config = optional(object({
-      cloudwatch_metrics_enabled = optional(bool)
-      metric_name                = string
-      sampled_requests_enabled   = optional(bool)
-    }), null)
-  }))
-  default = null
-}
-
-# =============================================================================
-# Geo Allowlist Statement Rules
-# =============================================================================
-
-variable "geo_allowlist_statement_rules" {
-  description = "A list of geo allowlist rules (uses NOT geo_match internally)."
-  type = list(object({
-    name     = string
-    priority = number
-    action   = string
-    captcha_config = optional(object({
-      immunity_time_property = object({
-        immunity_time = number
-      })
-    }), null)
-    rule_label = optional(list(string), null)
-    statement  = any
-    visibility_config = optional(object({
-      cloudwatch_metrics_enabled = optional(bool)
-      metric_name                = string
-      sampled_requests_enabled   = optional(bool)
-    }), null)
-  }))
-  default = null
-}
-
-# =============================================================================
-# Geo Match Statement Rules
-# =============================================================================
-
-variable "geo_match_statement_rules" {
-  description = "A list of geo match rules."
-  type = list(object({
-    name     = string
-    priority = number
-    action   = string
-    captcha_config = optional(object({
-      immunity_time_property = object({
-        immunity_time = number
-      })
-    }), null)
-    rule_label = optional(list(string), null)
-    custom_response = optional(object({
-      response_code            = string
-      custom_response_body_key = optional(string, null)
-      response_header = optional(object({
-        name  = string
-        value = string
-      }), null)
-    }), null)
-    statement = any
-    visibility_config = optional(object({
-      cloudwatch_metrics_enabled = optional(bool)
-      metric_name                = string
-      sampled_requests_enabled   = optional(bool)
-    }), null)
-  }))
-  default = null
-}
-
-# =============================================================================
-# IP Set Reference Statement Rules
-# =============================================================================
-
-variable "ip_set_reference_statement_rules" {
-  description = "A list of IP set reference rules."
-  type = list(object({
-    name     = string
-    priority = number
-    action   = string
-    captcha_config = optional(object({
-      immunity_time_property = object({
-        immunity_time = number
-      })
-    }), null)
-    rule_label = optional(list(string), null)
-    custom_response = optional(object({
-      response_code            = string
-      custom_response_body_key = optional(string, null)
-      response_header = optional(object({
-        name  = string
-        value = string
-      }), null)
-    }), null)
-    statement = any
-    visibility_config = optional(object({
-      cloudwatch_metrics_enabled = optional(bool)
-      metric_name                = string
-      sampled_requests_enabled   = optional(bool)
-    }), null)
-  }))
-  default = null
-}
-
-# =============================================================================
-# Rule Group Reference Statement Rules
-# =============================================================================
-
-variable "rule_group_reference_statement_rules" {
-  description = "A list of rule group reference rules."
-  type = list(object({
-    name            = string
-    priority        = number
-    override_action = optional(string)
-    captcha_config = optional(object({
-      immunity_time_property = object({
-        immunity_time = number
-      })
-    }), null)
-    rule_label = optional(list(string), null)
-    statement = object({
-      arn = string
-      rule_action_override = optional(map(object({
-        action = string
-        custom_request_handling = optional(object({
-          insert_header = object({
-            name  = string
-            value = string
-          })
-        }), null)
-        custom_response = optional(object({
-          response_code = string
-          response_header = optional(object({
-            name  = string
-            value = string
-          }), null)
-        }), null)
-      })), null)
-    })
-    visibility_config = optional(object({
-      cloudwatch_metrics_enabled = optional(bool)
-      metric_name                = string
-      sampled_requests_enabled   = optional(bool)
-    }), null)
-  }))
-  default = null
-}
-
-# =============================================================================
-# Regex Pattern Set Reference Statement Rules
-# =============================================================================
-
-variable "regex_pattern_set_reference_statement_rules" {
-  description = "A list of regex pattern set reference rules."
-  type = list(object({
-    name     = string
-    priority = number
-    action   = string
-    captcha_config = optional(object({
-      immunity_time_property = object({
-        immunity_time = number
-      })
-    }), null)
-    rule_label = optional(list(string), null)
-    statement  = any
-    visibility_config = optional(object({
-      cloudwatch_metrics_enabled = optional(bool)
-      metric_name                = string
-      sampled_requests_enabled   = optional(bool)
-    }), null)
-  }))
-  default = null
-}
-
-# =============================================================================
-# Regex Match Statement Rules
-# =============================================================================
-
-variable "regex_match_statement_rules" {
-  description = "A list of regex match rules."
-  type = list(object({
-    name     = string
-    priority = number
-    action   = string
-    captcha_config = optional(object({
-      immunity_time_property = object({
-        immunity_time = number
-      })
-    }), null)
-    rule_label = optional(list(string), null)
-    statement  = any
-    visibility_config = optional(object({
-      cloudwatch_metrics_enabled = optional(bool)
-      metric_name                = string
-      sampled_requests_enabled   = optional(bool)
-    }), null)
-  }))
-  default = null
-}
-
-# =============================================================================
-# Size Constraint Statement Rules
-# =============================================================================
-
-variable "size_constraint_statement_rules" {
-  description = "A list of size constraint rules."
-  type = list(object({
-    name     = string
-    priority = number
-    action   = string
-    captcha_config = optional(object({
-      immunity_time_property = object({
-        immunity_time = number
-      })
-    }), null)
-    rule_label = optional(list(string), null)
-    custom_response = optional(object({
-      response_code            = string
-      custom_response_body_key = optional(string, null)
-      response_header = optional(object({
-        name  = string
-        value = string
-      }), null)
-    }), null)
-    statement = any
-    visibility_config = optional(object({
-      cloudwatch_metrics_enabled = optional(bool)
-      metric_name                = string
-      sampled_requests_enabled   = optional(bool)
-    }), null)
-  }))
-  default = null
-}
-
-# =============================================================================
-# SQLi Match Statement Rules
-# =============================================================================
-
-variable "sqli_match_statement_rules" {
-  description = "A list of SQL injection match rules."
-  type = list(object({
-    name     = string
-    priority = number
-    action   = string
-    captcha_config = optional(object({
-      immunity_time_property = object({
-        immunity_time = number
-      })
-    }), null)
-    rule_label = optional(list(string), null)
-    custom_response = optional(object({
-      response_code            = string
-      custom_response_body_key = optional(string, null)
-      response_header = optional(object({
-        name  = string
-        value = string
-      }), null)
-    }), null)
-    statement = any
-    visibility_config = optional(object({
-      cloudwatch_metrics_enabled = optional(bool)
-      metric_name                = string
-      sampled_requests_enabled   = optional(bool)
-    }), null)
-  }))
-  default = null
-}
-
-# =============================================================================
-# XSS Match Statement Rules
-# =============================================================================
-
-variable "xss_match_statement_rules" {
-  description = "A list of cross-site scripting match rules."
-  type = list(object({
-    name     = string
-    priority = number
-    action   = string
-    captcha_config = optional(object({
-      immunity_time_property = object({
-        immunity_time = number
-      })
-    }), null)
-    rule_label = optional(list(string), null)
-    custom_response = optional(object({
-      response_code            = string
-      custom_response_body_key = optional(string, null)
-      response_header = optional(object({
-        name  = string
-        value = string
-      }), null)
-    }), null)
-    statement = any
-    visibility_config = optional(object({
-      cloudwatch_metrics_enabled = optional(bool)
-      metric_name                = string
-      sampled_requests_enabled   = optional(bool)
-    }), null)
-  }))
-  default = null
-}
-
-# =============================================================================
-# IP Sets (Standalone)
+# IP Set Configuration
 # =============================================================================
 
 variable "ip_sets" {
-  description = "Map of standalone IP sets to create."
+  description = <<-EOT
+    Map of IP Set configurations to create.
+    Each key becomes part of the resource name: {region_prefix}-waf-{account_name}-{project_name}-ipset-{key}
+  EOT
+
   type = map(object({
-    ip_address_version = string
-    addresses          = list(string)
+    scope              = optional(string, "REGIONAL")
     description        = optional(string, "Managed by Terraform")
+    ip_address_version = optional(string, "IPV4")
+    addresses          = list(string)
   }))
+
   default = {}
+
+  validation {
+    condition = alltrue([
+      for k, v in var.ip_sets : contains(["REGIONAL", "CLOUDFRONT"], v.scope)
+    ])
+    error_message = "IP set scope must be either 'REGIONAL' or 'CLOUDFRONT'."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.ip_sets : contains(["IPV4", "IPV6"], v.ip_address_version)
+    ])
+    error_message = "IP set ip_address_version must be either 'IPV4' or 'IPV6'."
+  }
 }
 
 # =============================================================================
-# Regex Pattern Sets
+# Regex Pattern Set Configuration
 # =============================================================================
 
 variable "regex_pattern_sets" {
-  description = "Map of regex pattern sets to create."
+  description = <<-EOT
+    Map of Regex Pattern Set configurations to create.
+    Each key becomes part of the resource name: {region_prefix}-waf-{account_name}-{project_name}-regex-{key}
+  EOT
+
   type = map(object({
-    description         = optional(string, "Managed by Terraform")
-    regular_expressions = list(string)
+    scope              = optional(string, "REGIONAL")
+    description        = optional(string, "Managed by Terraform")
+    regular_expression = list(string)
   }))
+
   default = {}
+
+  validation {
+    condition = alltrue([
+      for k, v in var.regex_pattern_sets : contains(["REGIONAL", "CLOUDFRONT"], v.scope)
+    ])
+    error_message = "Regex pattern set scope must be either 'REGIONAL' or 'CLOUDFRONT'."
+  }
 }
 
 # =============================================================================
-# Association
+# Rule Group Configuration
 # =============================================================================
 
-variable "association_resource_arns" {
-  description = "List of ARNs of resources to associate with the WAF Web ACL."
-  type        = list(string)
-  default     = []
+variable "rule_groups" {
+  description = <<-EOT
+    Map of custom Rule Group configurations to create.
+    Each key becomes part of the resource name: {region_prefix}-waf-{account_name}-{project_name}-rg-{key}
+  EOT
+
+  type = map(object({
+    scope       = optional(string, "REGIONAL")
+    description = optional(string, "Managed by Terraform")
+    capacity    = number
+
+    custom_response_body = optional(map(object({
+      content      = string
+      content_type = string
+    })), {})
+
+    # Rules use 'any' type for the same reason as web_acls rules
+    rules = optional(any, [])
+
+    visibility_config = object({
+      cloudwatch_metrics_enabled = bool
+      metric_name                = string
+      sampled_requests_enabled   = bool
+    })
+  }))
+
+  default = {}
 }
 
 # =============================================================================
 # Logging Configuration
 # =============================================================================
 
-variable "log_destination_configs" {
-  description = "List of ARNs of the logging destinations. Resource name must start with aws-waf-logs-."
-  type        = list(string)
-  default     = []
-}
+variable "logging_configurations" {
+  description = <<-EOT
+    Map of WAF logging configurations.
+    Each key is a unique identifier for the logging configuration.
+  EOT
 
-variable "redacted_fields" {
-  description = "List of fields to redact from the logs."
-  type = list(object({
-    method        = optional(bool, false)
-    query_string  = optional(bool, false)
-    uri_path      = optional(bool, false)
-    single_header = optional(list(string), null)
-  }))
-  default = []
-}
+  type = map(object({
+    web_acl_key          = string
+    log_destination_arns = list(string)
 
-variable "logging_filter" {
-  description = "Filtering configuration for WAF logs."
-  type = object({
-    default_behavior = string
-    filter = list(object({
-      behavior    = string
-      requirement = string
-      condition = list(object({
-        action_condition = optional(object({
-          action = string
-        }), null)
-        label_name_condition = optional(object({
-          label_name = string
-        }), null)
+    redacted_fields = optional(list(object({
+      method        = optional(bool, false)
+      query_string  = optional(bool, false)
+      uri_path      = optional(bool, false)
+      single_header = optional(list(string))
+    })), [])
+
+    logging_filter = optional(object({
+      default_behavior = string
+      filter = list(object({
+        behavior    = string
+        requirement = string
+        condition = list(object({
+          action_condition = optional(object({
+            action = string
+          }))
+          label_name_condition = optional(object({
+            label_name = string
+          }))
+        }))
       }))
     }))
-  })
-  default = null
+  }))
+
+  default = {}
+}
+
+# =============================================================================
+# Web ACL Association Configuration
+# =============================================================================
+
+variable "associations" {
+  description = <<-EOT
+    Map of Web ACL associations.
+    Each key is a unique identifier for the association.
+  EOT
+
+  type = map(object({
+    web_acl_key  = string
+    resource_arn = string
+  }))
+
+  default = {}
 }
