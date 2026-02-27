@@ -1,51 +1,50 @@
 # =============================================================================
-# WAF Web ACL Outputs
+# Web ACL Outputs
 # =============================================================================
 
-output "web_acl_id" {
-  description = "The ID of the WAF WebACL."
-  value       = try(aws_wafv2_web_acl.this[0].id, null)
+output "web_acl_ids" {
+  description = "Map of Web ACL keys to their IDs."
+  value = {
+    for k, v in aws_wafv2_web_acl.this : k => v.id
+  }
 }
 
-output "web_acl_arn" {
-  description = "The ARN of the WAF WebACL."
-  value       = try(aws_wafv2_web_acl.this[0].arn, null)
+output "web_acl_arns" {
+  description = "Map of Web ACL keys to their ARNs."
+  value = {
+    for k, v in aws_wafv2_web_acl.this : k => v.arn
+  }
 }
 
 output "web_acl_capacity" {
-  description = "The web ACL capacity units (WCUs) currently being used by this web ACL."
-  value       = try(aws_wafv2_web_acl.this[0].capacity, null)
+  description = "Map of Web ACL keys to their capacity units (WCUs)."
+  value = {
+    for k, v in aws_wafv2_web_acl.this : k => v.capacity
+  }
 }
 
-output "web_acl_name" {
-  description = "The name of the WAF WebACL."
-  value       = try(aws_wafv2_web_acl.this[0].name, null)
-}
-
-# =============================================================================
-# Logging Configuration Outputs
-# =============================================================================
-
-output "logging_configuration_id" {
-  description = "The ARN of the WAFv2 Web ACL logging configuration."
-  value       = try(aws_wafv2_web_acl_logging_configuration.this[0].id, null)
+output "web_acl_names" {
+  description = "Map of Web ACL keys to their names."
+  value = {
+    for k, v in aws_wafv2_web_acl.this : k => v.name
+  }
 }
 
 # =============================================================================
 # IP Set Outputs
 # =============================================================================
 
-output "ip_set_arns" {
-  description = "Map of IP set names to their ARNs (inline IP sets created from rules)."
+output "ip_set_ids" {
+  description = "Map of IP Set keys to their IDs."
   value = {
-    for k, v in aws_wafv2_ip_set.this : k => v.arn
+    for k, v in aws_wafv2_ip_set.this : k => v.id
   }
 }
 
-output "standalone_ip_set_arns" {
-  description = "Map of standalone IP set names to their ARNs."
+output "ip_set_arns" {
+  description = "Map of IP Set keys to their ARNs."
   value = {
-    for k, v in aws_wafv2_ip_set.standalone : k => v.arn
+    for k, v in aws_wafv2_ip_set.this : k => v.arn
   }
 }
 
@@ -53,10 +52,53 @@ output "standalone_ip_set_arns" {
 # Regex Pattern Set Outputs
 # =============================================================================
 
+output "regex_pattern_set_ids" {
+  description = "Map of Regex Pattern Set keys to their IDs."
+  value = {
+    for k, v in aws_wafv2_regex_pattern_set.this : k => v.id
+  }
+}
+
 output "regex_pattern_set_arns" {
-  description = "Map of regex pattern set names to their ARNs."
+  description = "Map of Regex Pattern Set keys to their ARNs."
   value = {
     for k, v in aws_wafv2_regex_pattern_set.this : k => v.arn
+  }
+}
+
+# =============================================================================
+# Rule Group Outputs
+# =============================================================================
+
+output "rule_group_ids" {
+  description = "Map of Rule Group keys to their IDs."
+  value = {
+    for k, v in aws_wafv2_rule_group.this : k => v.id
+  }
+}
+
+output "rule_group_arns" {
+  description = "Map of Rule Group keys to their ARNs."
+  value = {
+    for k, v in aws_wafv2_rule_group.this : k => v.arn
+  }
+}
+
+output "rule_group_capacity" {
+  description = "Map of Rule Group keys to their capacity units (WCUs)."
+  value = {
+    for k, v in aws_wafv2_rule_group.this : k => v.capacity
+  }
+}
+
+# =============================================================================
+# Logging Configuration Outputs
+# =============================================================================
+
+output "logging_configuration_ids" {
+  description = "Map of Logging Configuration keys to their IDs."
+  value = {
+    for k, v in aws_wafv2_web_acl_logging_configuration.this : k => v.id
   }
 }
 
@@ -65,7 +107,7 @@ output "regex_pattern_set_arns" {
 # =============================================================================
 
 output "association_ids" {
-  description = "Map of associated resource ARNs to their WAF association IDs."
+  description = "Map of Association keys to their IDs."
   value = {
     for k, v in aws_wafv2_web_acl_association.this : k => v.id
   }

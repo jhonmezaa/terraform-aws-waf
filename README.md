@@ -1,237 +1,370 @@
 # terraform-aws-waf
 
-Terraform module for AWS WAF v2 Web ACL with managed rules, custom rules, rate-based rules, IP sets, regex pattern sets, resource associations, and logging configuration.
+Production-ready Terraform module for AWS WAFv2. Supports Web ACLs, IP Sets, Regex Pattern Sets, Custom Rule Groups, Logging, and Resource Associations with all rule statement types.
 
 ## Features
 
-- **WAF Web ACL** with REGIONAL and CLOUDFRONT scope support
-- **AWS Managed Rule Groups** with action overrides, scope down statements, and advanced configurations (Bot Control, ATP, ACFP, Anti-DDoS)
-- **Custom Rules**: byte match, geo match, geo allowlist, IP set reference, regex match, regex pattern set reference, size constraint, SQLi match, XSS match
-- **Rate-Based Rules** with configurable limits, custom keys, scope down statements, and custom responses
-- **Rule Group References** with action overrides
-- **IP Sets** (inline from rules and standalone)
-- **Regex Pattern Sets**
-- **Resource Association** for ALB, API Gateway, AppSync, Cognito User Pool, App Runner, and Verified Access
-- **Logging Configuration** to CloudWatch Logs, S3, or Kinesis Data Firehose with field redaction and log filtering
-- **Custom Response Bodies** for block actions
-- **Consistent Naming** with region prefix convention
+- **Web ACLs** with REGIONAL and CLOUDFRONT scope
+- **All rule statement types**: managed rules, IP set, rate-based, byte match, size constraint, geo match, regex, rule group reference, label match
+- **Rule composition**: AND, OR, NOT statements for complex rule logic
+- **IP Sets** for IPv4 and IPv6 with cross-reference support
+- **Regex Pattern Sets** with cross-reference support
+- **Custom Rule Groups** with configurable WCU capacity
+- **Logging** to CloudWatch, S3, or Kinesis Firehose with field redaction and filtering
+- **Associations** for ALB, API Gateway, AppSync, Cognito, App Runner, Verified Access
+- **Cross-resource references** via `ip_set_key`, `regex_set_key`, `rule_group_key`, `web_acl_key`
+- **29-region prefix map** with configurable naming
+- **for_each on all resources** (no count)
 
 ## Usage
 
-### Basic Example
+### Basic - Managed Rules with Rate Limiting
 
 ```hcl
 module "waf" {
-  source = "jhonmezaa/waf/aws//waf"
+  source = "./terraform-aws-waf/waf"
 
   account_name = "prod"
   project_name = "myapp"
 
-  description    = "WAF for myapp"
-  scope          = "REGIONAL"
-  default_action = "allow"
+  web_acls = {
+    main = {
+      scope          = "REGIONAL"
+      default_action = "allow"
 
-  visibility_config = {
-    cloudwatch_metrics_enabled = true
-    metric_name                = "waf-prod-myapp"
-    sampled_requests_enabled   = true
-  }
-
-  managed_rule_group_statement_rules = [
-    {
-      name     = "AWS-AWSManagedRulesCommonRuleSet"
-      priority = 10
-      statement = {
-        name        = "AWSManagedRulesCommonRuleSet"
-        vendor_name = "AWS"
-      }
-      visibility_config = {
-        cloudwatch_metrics_enabled = true
-        sampled_requests_enabled   = true
-        metric_name                = "AWS-AWSManagedRulesCommonRuleSet"
-      }
-    },
-    {
-      name     = "AWS-AWSManagedRulesKnownBadInputsRuleSet"
-      priority = 20
-      statement = {
-        name        = "AWSManagedRulesKnownBadInputsRuleSet"
-        vendor_name = "AWS"
-      }
-      visibility_config = {
-        cloudwatch_metrics_enabled = true
-        sampled_requests_enabled   = true
-        metric_name                = "AWS-AWSManagedRulesKnownBadInputsRuleSet"
-      }
-    }
-  ]
-
-  rate_based_statement_rules = [
-    {
-      name     = "rate-limit"
-      priority = 50
-      action   = "block"
-      statement = {
-        limit              = 2000
-        aggregate_key_type = "IP"
-      }
-      visibility_config = {
-        cloudwatch_metrics_enabled = true
-        sampled_requests_enabled   = true
-        metric_name                = "rate-limit"
-      }
-    }
-  ]
-}
-```
-
-### Associate with ALB
-
-```hcl
-module "waf" {
-  source = "jhonmezaa/waf/aws//waf"
-  # ... WAF configuration ...
-
-  association_resource_arns = [
-    aws_lb.main.arn
-  ]
-}
-```
-
-### Enable Logging
-
-```hcl
-resource "aws_cloudwatch_log_group" "waf" {
-  name              = "aws-waf-logs-myapp"
-  retention_in_days = 30
-}
-
-module "waf" {
-  source = "jhonmezaa/waf/aws//waf"
-  # ... WAF configuration ...
-
-  log_destination_configs = [aws_cloudwatch_log_group.waf.arn]
-
-  redacted_fields = [
-    {
-      single_header = ["authorization", "cookie"]
-    }
-  ]
-
-  logging_filter = {
-    default_behavior = "KEEP"
-    filter = [
-      {
-        behavior    = "DROP"
-        requirement = "MEETS_ALL"
-        condition = [
-          {
-            action_condition = {
-              action = "ALLOW"
-            }
+      rules = [
+        {
+          name            = "aws-common-rules"
+          priority        = 10
+          override_action = "none"
+          managed_rule_group_statement = {
+            vendor_name = "AWS"
+            name        = "AWSManagedRulesCommonRuleSet"
           }
-        ]
+          visibility_config = {
+            cloudwatch_metrics_enabled = true
+            metric_name                = "aws-common-rules"
+            sampled_requests_enabled   = true
+          }
+        },
+        {
+          name     = "rate-limit"
+          priority = 20
+          action   = "block"
+          rate_based_statement = {
+            limit              = 2000
+            aggregate_key_type = "IP"
+          }
+          visibility_config = {
+            cloudwatch_metrics_enabled = true
+            metric_name                = "rate-limit"
+            sampled_requests_enabled   = true
+          }
+        }
+      ]
+
+      visibility_config = {
+        cloudwatch_metrics_enabled = true
+        metric_name                = "waf-acl"
+        sampled_requests_enabled   = true
       }
-    ]
+    }
   }
 }
 ```
+
+### Complete - All Features
+
+```hcl
+module "waf" {
+  source = "./terraform-aws-waf/waf"
+
+  account_name = "prod"
+  project_name = "myapp"
+
+  # IP Sets with cross-reference
+  ip_sets = {
+    whitelist = {
+      ip_address_version = "IPV4"
+      addresses          = ["10.0.0.0/8"]
+    }
+    blacklist = {
+      ip_address_version = "IPV4"
+      addresses          = ["192.0.2.0/24"]
+    }
+  }
+
+  # Regex Pattern Sets
+  regex_pattern_sets = {
+    bad-bots = {
+      regular_expression = ["(?i).*scrapy.*", "(?i).*bot.*attack.*"]
+    }
+  }
+
+  # Custom Rule Groups
+  rule_groups = {
+    custom = {
+      capacity = 100
+      rules = [
+        {
+          name     = "block-admin"
+          priority = 1
+          action   = "block"
+          byte_match_statement = {
+            positional_constraint = "STARTS_WITH"
+            search_string         = "/admin"
+            field_to_match        = { uri_path = {} }
+            text_transformation   = [{ priority = 0, type = "LOWERCASE" }]
+          }
+          visibility_config = {
+            cloudwatch_metrics_enabled = true
+            metric_name                = "block-admin"
+            sampled_requests_enabled   = true
+          }
+        }
+      ]
+      visibility_config = {
+        cloudwatch_metrics_enabled = true
+        metric_name                = "custom-rg"
+        sampled_requests_enabled   = true
+      }
+    }
+  }
+
+  # Web ACL referencing IP sets, regex sets, and rule groups
+  web_acls = {
+    main = {
+      scope          = "REGIONAL"
+      default_action = "allow"
+      rules = [
+        {
+          name     = "allow-whitelist"
+          priority = 1
+          action   = "allow"
+          ip_set_reference_statement = { ip_set_key = "whitelist" }
+          visibility_config = {
+            cloudwatch_metrics_enabled = true
+            metric_name                = "allow-whitelist"
+            sampled_requests_enabled   = true
+          }
+        },
+        {
+          name     = "block-blacklist"
+          priority = 2
+          action   = "block"
+          ip_set_reference_statement = { ip_set_key = "blacklist" }
+          visibility_config = {
+            cloudwatch_metrics_enabled = true
+            metric_name                = "block-blacklist"
+            sampled_requests_enabled   = true
+          }
+        },
+        {
+          name     = "block-bad-bots"
+          priority = 10
+          action   = "block"
+          regex_pattern_set_reference_statement = {
+            regex_set_key  = "bad-bots"
+            field_to_match = { single_header = { name = "user-agent" } }
+            text_transformation = [{ priority = 0, type = "LOWERCASE" }]
+          }
+          visibility_config = {
+            cloudwatch_metrics_enabled = true
+            metric_name                = "block-bad-bots"
+            sampled_requests_enabled   = true
+          }
+        },
+        {
+          name            = "custom-rules"
+          priority        = 20
+          override_action = "none"
+          rule_group_reference_statement = { rule_group_key = "custom" }
+          visibility_config = {
+            cloudwatch_metrics_enabled = true
+            metric_name                = "custom-rules"
+            sampled_requests_enabled   = true
+          }
+        }
+      ]
+      visibility_config = {
+        cloudwatch_metrics_enabled = true
+        metric_name                = "waf-acl"
+        sampled_requests_enabled   = true
+      }
+    }
+  }
+
+  # Logging
+  logging_configurations = {
+    main = {
+      web_acl_key          = "main"
+      log_destination_arns = [aws_cloudwatch_log_group.waf.arn]
+      redacted_fields      = [{ single_header = ["authorization"] }]
+    }
+  }
+
+  # Association
+  associations = {
+    alb = {
+      web_acl_key  = "main"
+      resource_arn = aws_lb.example.arn
+    }
+  }
+}
+```
+
+## Requirements
+
+| Name | Version |
+|------|---------|
+| terraform | ~> 1.0 |
+| aws | ~> 6.0 |
+
+## Resources
+
+| Resource | Description |
+|----------|-------------|
+| `aws_wafv2_web_acl` | WAF Web Access Control List |
+| `aws_wafv2_ip_set` | IP address sets for IPv4/IPv6 |
+| `aws_wafv2_regex_pattern_set` | Regex pattern sets |
+| `aws_wafv2_rule_group` | Custom rule groups |
+| `aws_wafv2_web_acl_logging_configuration` | Logging configuration |
+| `aws_wafv2_web_acl_association` | Resource association |
 
 ## Inputs
+
+### General
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|----------|
 | `create` | Whether to create WAF resources | `bool` | `true` | no |
 | `account_name` | Account name for resource naming | `string` | - | yes |
 | `project_name` | Project name for resource naming | `string` | - | yes |
-| `region_prefix` | Region prefix for naming (auto-derived if not set) | `string` | `null` | no |
-| `use_region_prefix` | Whether to include region prefix in names | `bool` | `true` | no |
+| `region_prefix` | Region prefix override | `string` | `null` | no |
+| `use_region_prefix` | Include region prefix in names | `bool` | `true` | no |
 | `tags` | Additional tags for all resources | `map(string)` | `{}` | no |
-| `description` | Description of the WebACL | `string` | `"Managed by Terraform"` | no |
-| `scope` | REGIONAL or CLOUDFRONT | `string` | `"REGIONAL"` | no |
-| `default_action` | Default action: allow or block | `string` | `"block"` | no |
-| `default_block_response` | HTTP response code for default block | `number` | `null` | no |
-| `default_block_custom_response_body_key` | Custom response body key for default block | `string` | `null` | no |
-| `token_domains` | Domains for WAF token acceptance | `list(string)` | `null` | no |
-| `visibility_config` | CloudWatch metrics and sampling config | `object` | - | yes |
-| `custom_response_body` | Custom response bodies map | `map(object)` | `{}` | no |
-| `managed_rule_group_statement_rules` | AWS managed rule groups | `list(object)` | `null` | no |
-| `rate_based_statement_rules` | Rate-based rules | `list(object)` | `null` | no |
-| `byte_match_statement_rules` | Byte match rules | `list(object)` | `null` | no |
-| `geo_allowlist_statement_rules` | Geo allowlist rules | `list(object)` | `null` | no |
-| `geo_match_statement_rules` | Geo match rules | `list(object)` | `null` | no |
-| `ip_set_reference_statement_rules` | IP set reference rules | `list(object)` | `null` | no |
-| `rule_group_reference_statement_rules` | Rule group reference rules | `list(object)` | `null` | no |
-| `regex_pattern_set_reference_statement_rules` | Regex pattern set reference rules | `list(object)` | `null` | no |
-| `regex_match_statement_rules` | Regex match rules | `list(object)` | `null` | no |
-| `size_constraint_statement_rules` | Size constraint rules | `list(object)` | `null` | no |
-| `sqli_match_statement_rules` | SQLi match rules | `list(object)` | `null` | no |
-| `xss_match_statement_rules` | XSS match rules | `list(object)` | `null` | no |
-| `ip_sets` | Standalone IP sets to create | `map(object)` | `{}` | no |
-| `regex_pattern_sets` | Regex pattern sets to create | `map(object)` | `{}` | no |
-| `association_resource_arns` | Resource ARNs to associate with WAF | `list(string)` | `[]` | no |
-| `log_destination_configs` | Logging destination ARNs | `list(string)` | `[]` | no |
-| `redacted_fields` | Fields to redact from logs | `list(object)` | `[]` | no |
-| `logging_filter` | Log filtering configuration | `object` | `null` | no |
+
+### Web ACLs
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `web_acls` | Map of Web ACL configurations | `map(object({...}))` | `{}` |
+
+### IP Sets
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `ip_sets` | Map of IP Set configurations | `map(object({...}))` | `{}` |
+
+### Regex Pattern Sets
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `regex_pattern_sets` | Map of Regex Pattern Set configurations | `map(object({...}))` | `{}` |
+
+### Rule Groups
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `rule_groups` | Map of Rule Group configurations | `map(object({...}))` | `{}` |
+
+### Logging
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `logging_configurations` | Map of logging configurations | `map(object({...}))` | `{}` |
+
+### Associations
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `associations` | Map of Web ACL associations | `map(object({...}))` | `{}` |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| `web_acl_id` | The ID of the WAF WebACL |
-| `web_acl_arn` | The ARN of the WAF WebACL |
-| `web_acl_capacity` | WCUs currently used by this web ACL |
-| `web_acl_name` | The name of the WAF WebACL |
-| `logging_configuration_id` | The ARN of the logging configuration |
-| `ip_set_arns` | Map of inline IP set names to ARNs |
-| `standalone_ip_set_arns` | Map of standalone IP set names to ARNs |
-| `regex_pattern_set_arns` | Map of regex pattern set names to ARNs |
-| `association_ids` | Map of associated resource ARNs to association IDs |
-
-## AWS Managed Rule Groups Reference
-
-| Rule Group Name | Description |
-|----------------|-------------|
-| `AWSManagedRulesCommonRuleSet` | Core rule set - protection against common threats |
-| `AWSManagedRulesAdminProtectionRuleSet` | Admin page protection |
-| `AWSManagedRulesKnownBadInputsRuleSet` | Known bad inputs (Log4j, etc.) |
-| `AWSManagedRulesSQLiRuleSet` | SQL injection protection |
-| `AWSManagedRulesLinuxRuleSet` | Linux-specific vulnerabilities |
-| `AWSManagedRulesUnixRuleSet` | POSIX-specific vulnerabilities |
-| `AWSManagedRulesWindowsRuleSet` | Windows-specific vulnerabilities |
-| `AWSManagedRulesPHPRuleSet` | PHP-specific vulnerabilities |
-| `AWSManagedRulesWordPressRuleSet` | WordPress-specific vulnerabilities |
-| `AWSManagedRulesAmazonIpReputationList` | Amazon IP reputation list |
-| `AWSManagedRulesAnonymousIpList` | Anonymous IP list |
-| `AWSManagedRulesBotControlRuleSet` | Bot control (requires managed_rule_group_configs) |
-| `AWSManagedRulesATPRuleSet` | Account takeover prevention |
-| `AWSManagedRulesACFPRuleSet` | Account creation fraud prevention |
-| `AWSManagedRulesAntiDDoSRuleSet` | DDoS protection |
+| `web_acl_ids` | Map of Web ACL keys to IDs |
+| `web_acl_arns` | Map of Web ACL keys to ARNs |
+| `web_acl_capacity` | Map of Web ACL keys to WCU capacity |
+| `web_acl_names` | Map of Web ACL keys to names |
+| `ip_set_ids` | Map of IP Set keys to IDs |
+| `ip_set_arns` | Map of IP Set keys to ARNs |
+| `regex_pattern_set_ids` | Map of Regex Pattern Set keys to IDs |
+| `regex_pattern_set_arns` | Map of Regex Pattern Set keys to ARNs |
+| `rule_group_ids` | Map of Rule Group keys to IDs |
+| `rule_group_arns` | Map of Rule Group keys to ARNs |
+| `rule_group_capacity` | Map of Rule Group keys to WCU capacity |
+| `logging_configuration_ids` | Map of Logging Configuration keys to IDs |
+| `association_ids` | Map of Association keys to IDs |
 
 ## Naming Convention
 
-Resources follow the standard naming convention:
+All resources follow the standard naming pattern:
 
 ```
-{region_prefix}-waf-{account_name}-{project_name}
+{region_prefix}-waf-{resource_type}-{account_name}-{project_name}-{key}
 ```
 
-Examples:
-- WAF: `ause1-waf-prod-myapp`
-- IP Set: `ause1-waf-ipset-prod-myapp-blocklist`
-- Regex Set: `ause1-waf-regex-prod-myapp-patterns`
+| Resource | Pattern | Example |
+|----------|---------|---------|
+| Web ACL | `{prefix}-waf-{account}-{project}-{key}` | `ause1-waf-prod-myapp-main` |
+| IP Set | `{prefix}-waf-{account}-{project}-ipset-{key}` | `ause1-waf-prod-myapp-ipset-whitelist` |
+| Regex Set | `{prefix}-waf-{account}-{project}-regex-{key}` | `ause1-waf-prod-myapp-regex-bad-bots` |
+| Rule Group | `{prefix}-waf-{account}-{project}-rg-{key}` | `ause1-waf-prod-myapp-rg-custom` |
+
+## Supported Rule Statement Types
+
+| Statement | Web ACL | Rule Group | Description |
+|-----------|---------|------------|-------------|
+| `managed_rule_group_statement` | Yes | No | AWS and marketplace managed rules |
+| `ip_set_reference_statement` | Yes | Yes | Match against IP sets |
+| `rate_based_statement` | Yes | No | Rate-limit requests |
+| `byte_match_statement` | Yes | Yes | Match byte sequences |
+| `size_constraint_statement` | Yes | Yes | Match request sizes |
+| `geo_match_statement` | Yes | Yes | Match by country |
+| `regex_pattern_set_reference_statement` | Yes | Yes | Match regex patterns |
+| `rule_group_reference_statement` | Yes | No | Reference custom rule groups |
+| `label_match_statement` | Yes | Yes | Match by labels |
+| `and_statement` | Yes | No | Combine with AND |
+| `or_statement` | Yes | No | Combine with OR |
+| `not_statement` | Yes | No | Negate a statement |
+
+## Cross-Resource References
+
+Use `_key` parameters to reference resources defined in the same module:
+
+| Parameter | References | Used In |
+|-----------|-----------|---------|
+| `ip_set_key` | `ip_sets` map key | `ip_set_reference_statement` |
+| `regex_set_key` | `regex_pattern_sets` map key | `regex_pattern_set_reference_statement` |
+| `rule_group_key` | `rule_groups` map key | `rule_group_reference_statement` |
+| `web_acl_key` | `web_acls` map key | `logging_configurations`, `associations` |
 
 ## Examples
 
-- [Basic](./examples/basic/) - WAF with managed rules and rate limiting
-- [Advanced](./examples/advanced/) - Full-featured WAF with all rule types, logging, and associations
+- [Basic](examples/basic/) - Managed rules with rate limiting
+- [Complete](examples/complete/) - All features: IP sets, regex, rule groups, logging, associations
 
-## Requirements
+## AWS Managed Rule Groups
 
-| Name | Version |
-|------|---------|
-| Terraform | ~> 1.0 |
-| AWS Provider | ~> 6.0 |
+Common AWS managed rule groups:
+
+| Name | Description | WCU |
+|------|-------------|-----|
+| `AWSManagedRulesCommonRuleSet` | Core rules for common threats | 700 |
+| `AWSManagedRulesKnownBadInputsRuleSet` | Known bad input patterns | 200 |
+| `AWSManagedRulesSQLiRuleSet` | SQL injection protection | 200 |
+| `AWSManagedRulesLinuxRuleSet` | Linux-specific exploits | 200 |
+| `AWSManagedRulesUnixRuleSet` | POSIX OS exploits | 100 |
+| `AWSManagedRulesWindowsRuleSet` | Windows-specific exploits | 200 |
+| `AWSManagedRulesPHPRuleSet` | PHP application exploits | 100 |
+| `AWSManagedRulesWordPressRuleSet` | WordPress exploits | 100 |
+| `AWSManagedRulesAmazonIpReputationList` | Amazon IP reputation | 25 |
+| `AWSManagedRulesAnonymousIpList` | Anonymous IP addresses | 50 |
+| `AWSManagedRulesBotControlRuleSet` | Bot control (requires config) | 50 |
+| `AWSManagedRulesATPRuleSet` | Account takeover prevention | 50 |
+| `AWSManagedRulesACFPRuleSet` | Account creation fraud prevention | 50 |
 
 ## License
 

@@ -1,6 +1,6 @@
 locals {
   # =============================================================================
-  # Region Prefix Mapping
+  # Region Prefix Mapping (29 regions)
   # =============================================================================
 
   region_prefix_map = {
@@ -53,109 +53,57 @@ locals {
   name_prefix = var.use_region_prefix ? "${local.region_prefix}-" : ""
 
   # =============================================================================
-  # Resource Naming
+  # Resource Name Generation
   # =============================================================================
 
-  waf_name   = "${local.name_prefix}waf-${var.account_name}-${var.project_name}"
-  ipset_name = "${local.name_prefix}waf-ipset-${var.account_name}-${var.project_name}"
-  regex_name = "${local.name_prefix}waf-regex-${var.account_name}-${var.project_name}"
+  # Base name pattern: {prefix}waf-{account}-{project}
+  resource_name = "${local.name_prefix}waf-${var.account_name}-${var.project_name}"
 
   # =============================================================================
-  # Common Tags
+  # Web ACL Processing
   # =============================================================================
 
-  common_tags = merge(
+  web_acls = var.create ? var.web_acls : {}
+
+  # =============================================================================
+  # IP Set Processing
+  # =============================================================================
+
+  ip_sets = var.create ? var.ip_sets : {}
+
+  # =============================================================================
+  # Regex Pattern Set Processing
+  # =============================================================================
+
+  regex_pattern_sets = var.create ? var.regex_pattern_sets : {}
+
+  # =============================================================================
+  # Rule Group Processing
+  # =============================================================================
+
+  rule_groups = var.create ? var.rule_groups : {}
+
+  # =============================================================================
+  # Logging Configuration Processing
+  # =============================================================================
+
+  logging_configurations = var.create ? var.logging_configurations : {}
+
+  # =============================================================================
+  # Association Processing
+  # =============================================================================
+
+  associations = var.create ? var.associations : {}
+
+  # =============================================================================
+  # Default Tags
+  # =============================================================================
+
+  default_tags = merge(
     {
-      Name      = local.waf_name
-      ManagedBy = "Terraform"
+      "ManagedBy" = "Terraform"
+      "Module"    = "terraform-aws-waf"
     },
     var.tags
   )
-
-  # =============================================================================
-  # Rule Processing
-  # =============================================================================
-
-  byte_match_statement_rules = var.create && var.byte_match_statement_rules != null ? {
-    for rule in var.byte_match_statement_rules :
-    rule.name => rule
-  } : {}
-
-  geo_allowlist_statement_rules = var.create && var.geo_allowlist_statement_rules != null ? {
-    for rule in var.geo_allowlist_statement_rules :
-    rule.name => rule
-  } : {}
-
-  geo_match_statement_rules = var.create && var.geo_match_statement_rules != null ? {
-    for rule in var.geo_match_statement_rules :
-    rule.name => rule
-  } : {}
-
-  ip_set_reference_statement_rules = var.create && var.ip_set_reference_statement_rules != null ? {
-    for rule in var.ip_set_reference_statement_rules :
-    rule.name => rule
-  } : {}
-
-  managed_rule_group_statement_rules = var.create && var.managed_rule_group_statement_rules != null ? {
-    for rule in var.managed_rule_group_statement_rules :
-    rule.name => rule
-  } : {}
-
-  rate_based_statement_rules = var.create && var.rate_based_statement_rules != null ? {
-    for rule in var.rate_based_statement_rules :
-    rule.name => rule
-  } : {}
-
-  rule_group_reference_statement_rules = var.create && var.rule_group_reference_statement_rules != null ? {
-    for rule in var.rule_group_reference_statement_rules :
-    rule.name => rule
-  } : {}
-
-  regex_pattern_set_reference_statement_rules = var.create && var.regex_pattern_set_reference_statement_rules != null ? {
-    for rule in var.regex_pattern_set_reference_statement_rules :
-    rule.name => rule
-  } : {}
-
-  regex_match_statement_rules = var.create && var.regex_match_statement_rules != null ? {
-    for rule in var.regex_match_statement_rules :
-    rule.name => rule
-  } : {}
-
-  size_constraint_statement_rules = var.create && var.size_constraint_statement_rules != null ? {
-    for rule in var.size_constraint_statement_rules :
-    rule.name => rule
-  } : {}
-
-  sqli_match_statement_rules = var.create && var.sqli_match_statement_rules != null ? {
-    for rule in var.sqli_match_statement_rules :
-    rule.name => rule
-  } : {}
-
-  xss_match_statement_rules = var.create && var.xss_match_statement_rules != null ? {
-    for rule in var.xss_match_statement_rules :
-    rule.name => rule
-  } : {}
-
-  # =============================================================================
-  # IP Set Processing (inline IP sets from rules)
-  # =============================================================================
-
-  inline_ip_sets = var.create && var.ip_set_reference_statement_rules != null ? {
-    for rule in var.ip_set_reference_statement_rules :
-    rule.name => rule.statement.ip_set
-    if try(rule.statement.ip_set, null) != null && try(rule.statement.arn, null) == null
-  } : {}
-
-  ip_rule_to_ip_set = var.create && var.ip_set_reference_statement_rules != null ? {
-    for rule in var.ip_set_reference_statement_rules :
-    rule.name => rule.name
-  } : {}
-
-  # =============================================================================
-  # Default Block Custom Response
-  # =============================================================================
-
-  default_custom_response_body_key = var.default_block_custom_response_body_key != null ? (
-    contains(keys(var.custom_response_body), var.default_block_custom_response_body_key) ? var.default_block_custom_response_body_key : null
-  ) : null
 }
