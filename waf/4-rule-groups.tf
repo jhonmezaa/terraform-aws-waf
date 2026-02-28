@@ -41,7 +41,7 @@ resource "aws_wafv2_rule_group" "this" {
           for_each = rule.value.action == "block" ? [1] : []
           content {
             dynamic "custom_response" {
-              for_each = rule.value.custom_response != null ? [rule.value.custom_response] : []
+              for_each = try(rule.value.custom_response, null) != null ? [rule.value.custom_response] : []
               content {
                 response_code            = custom_response.value.response_code
                 custom_response_body_key = custom_response.value.custom_response_body_key
@@ -74,7 +74,7 @@ resource "aws_wafv2_rule_group" "this" {
       statement {
         # ===== Byte Match Statement =====
         dynamic "byte_match_statement" {
-          for_each = rule.value.byte_match_statement != null ? [rule.value.byte_match_statement] : []
+          for_each = try(rule.value.byte_match_statement, null) != null ? [rule.value.byte_match_statement] : []
           content {
             positional_constraint = byte_match_statement.value.positional_constraint
             search_string         = byte_match_statement.value.search_string
@@ -185,7 +185,7 @@ resource "aws_wafv2_rule_group" "this" {
 
         # ===== IP Set Reference Statement =====
         dynamic "ip_set_reference_statement" {
-          for_each = rule.value.ip_set_reference_statement != null ? [rule.value.ip_set_reference_statement] : []
+          for_each = try(rule.value.ip_set_reference_statement, null) != null ? [rule.value.ip_set_reference_statement] : []
           content {
             arn = ip_set_reference_statement.value.ip_set_key != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : ip_set_reference_statement.value.arn
 
@@ -202,7 +202,7 @@ resource "aws_wafv2_rule_group" "this" {
 
         # ===== Geo Match Statement =====
         dynamic "geo_match_statement" {
-          for_each = rule.value.geo_match_statement != null ? [rule.value.geo_match_statement] : []
+          for_each = try(rule.value.geo_match_statement, null) != null ? [rule.value.geo_match_statement] : []
           content {
             country_codes = geo_match_statement.value.country_codes
 
@@ -218,7 +218,7 @@ resource "aws_wafv2_rule_group" "this" {
 
         # ===== Size Constraint Statement =====
         dynamic "size_constraint_statement" {
-          for_each = rule.value.size_constraint_statement != null ? [rule.value.size_constraint_statement] : []
+          for_each = try(rule.value.size_constraint_statement, null) != null ? [rule.value.size_constraint_statement] : []
           content {
             comparison_operator = size_constraint_statement.value.comparison_operator
             size                = size_constraint_statement.value.size
@@ -275,7 +275,7 @@ resource "aws_wafv2_rule_group" "this" {
 
         # ===== Regex Pattern Set Reference Statement =====
         dynamic "regex_pattern_set_reference_statement" {
-          for_each = rule.value.regex_pattern_set_reference_statement != null ? [rule.value.regex_pattern_set_reference_statement] : []
+          for_each = try(rule.value.regex_pattern_set_reference_statement, null) != null ? [rule.value.regex_pattern_set_reference_statement] : []
           content {
             arn = regex_pattern_set_reference_statement.value.regex_set_key != null ? aws_wafv2_regex_pattern_set.this[regex_pattern_set_reference_statement.value.regex_set_key].arn : regex_pattern_set_reference_statement.value.arn
 
@@ -323,10 +323,120 @@ resource "aws_wafv2_rule_group" "this" {
 
         # ===== Label Match Statement =====
         dynamic "label_match_statement" {
-          for_each = rule.value.label_match_statement != null ? [rule.value.label_match_statement] : []
+          for_each = try(rule.value.label_match_statement, null) != null ? [rule.value.label_match_statement] : []
           content {
             scope = label_match_statement.value.scope
             key   = label_match_statement.value.key
+          }
+        }
+
+        # ===== SQLi Match Statement =====
+        dynamic "sqli_match_statement" {
+          for_each = try(rule.value.sqli_match_statement, null) != null ? [rule.value.sqli_match_statement] : []
+          content {
+            dynamic "field_to_match" {
+              for_each = sqli_match_statement.value.field_to_match != null ? [sqli_match_statement.value.field_to_match] : []
+              content {
+                dynamic "all_query_arguments" {
+                  for_each = try(field_to_match.value.all_query_arguments, null) != null ? [1] : []
+                  content {}
+                }
+                dynamic "body" {
+                  for_each = try(field_to_match.value.body, null) != null ? [1] : []
+                  content {
+                    oversize_handling = try(field_to_match.value.body.oversize_handling, null)
+                  }
+                }
+                dynamic "method" {
+                  for_each = try(field_to_match.value.method, null) != null ? [1] : []
+                  content {}
+                }
+                dynamic "query_string" {
+                  for_each = try(field_to_match.value.query_string, null) != null ? [1] : []
+                  content {}
+                }
+                dynamic "single_header" {
+                  for_each = try(field_to_match.value.single_header, null) != null ? [field_to_match.value.single_header] : []
+                  content {
+                    name = single_header.value.name
+                  }
+                }
+                dynamic "single_query_argument" {
+                  for_each = try(field_to_match.value.single_query_argument, null) != null ? [field_to_match.value.single_query_argument] : []
+                  content {
+                    name = single_query_argument.value.name
+                  }
+                }
+                dynamic "uri_path" {
+                  for_each = try(field_to_match.value.uri_path, null) != null ? [1] : []
+                  content {}
+                }
+              }
+            }
+
+            dynamic "text_transformation" {
+              for_each = sqli_match_statement.value.text_transformation
+              content {
+                priority = text_transformation.value.priority
+                type     = text_transformation.value.type
+              }
+            }
+
+            sensitivity_level = try(sqli_match_statement.value.sensitivity_level, null)
+          }
+        }
+
+        # ===== XSS Match Statement =====
+        dynamic "xss_match_statement" {
+          for_each = try(rule.value.xss_match_statement, null) != null ? [rule.value.xss_match_statement] : []
+          content {
+            dynamic "field_to_match" {
+              for_each = xss_match_statement.value.field_to_match != null ? [xss_match_statement.value.field_to_match] : []
+              content {
+                dynamic "all_query_arguments" {
+                  for_each = try(field_to_match.value.all_query_arguments, null) != null ? [1] : []
+                  content {}
+                }
+                dynamic "body" {
+                  for_each = try(field_to_match.value.body, null) != null ? [1] : []
+                  content {
+                    oversize_handling = try(field_to_match.value.body.oversize_handling, null)
+                  }
+                }
+                dynamic "method" {
+                  for_each = try(field_to_match.value.method, null) != null ? [1] : []
+                  content {}
+                }
+                dynamic "query_string" {
+                  for_each = try(field_to_match.value.query_string, null) != null ? [1] : []
+                  content {}
+                }
+                dynamic "single_header" {
+                  for_each = try(field_to_match.value.single_header, null) != null ? [field_to_match.value.single_header] : []
+                  content {
+                    name = single_header.value.name
+                  }
+                }
+                dynamic "single_query_argument" {
+                  for_each = try(field_to_match.value.single_query_argument, null) != null ? [field_to_match.value.single_query_argument] : []
+                  content {
+                    name = single_query_argument.value.name
+                  }
+                }
+                dynamic "uri_path" {
+                  for_each = try(field_to_match.value.uri_path, null) != null ? [1] : []
+                  content {}
+                }
+              }
+            }
+
+            dynamic "text_transformation" {
+              for_each = xss_match_statement.value.text_transformation
+              content {
+                priority = text_transformation.value.priority
+                type     = text_transformation.value.type
+              }
+            }
           }
         }
       }
@@ -340,7 +450,7 @@ resource "aws_wafv2_rule_group" "this" {
 
       # --- Captcha Config ---
       dynamic "captcha_config" {
-        for_each = rule.value.captcha_config != null ? [rule.value.captcha_config] : []
+        for_each = try(rule.value.captcha_config, null) != null ? [rule.value.captcha_config] : []
         content {
           immunity_time_property {
             immunity_time = captcha_config.value.immunity_time
@@ -350,7 +460,7 @@ resource "aws_wafv2_rule_group" "this" {
 
       # --- Rule Labels ---
       dynamic "rule_label" {
-        for_each = rule.value.rule_labels != null ? rule.value.rule_labels : []
+        for_each = try(rule.value.rule_labels, null) != null ? rule.value.rule_labels : []
         content {
           name = rule_label.value
         }
