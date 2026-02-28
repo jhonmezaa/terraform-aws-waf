@@ -14,30 +14,45 @@ resource "aws_wafv2_web_acl_logging_configuration" "this" {
   # Redacted Fields
   # =========================================================================
 
+  # Redacted fields: method, query_string, uri_path (one block each)
   dynamic "redacted_fields" {
-    for_each = each.value.redacted_fields
-
+    for_each = [
+      for rf in each.value.redacted_fields : rf
+      if rf.method
+    ]
     content {
-      dynamic "method" {
-        for_each = redacted_fields.value.method ? [1] : []
-        content {}
-      }
+      method {}
+    }
+  }
 
-      dynamic "query_string" {
-        for_each = redacted_fields.value.query_string ? [1] : []
-        content {}
-      }
+  dynamic "redacted_fields" {
+    for_each = [
+      for rf in each.value.redacted_fields : rf
+      if rf.query_string
+    ]
+    content {
+      query_string {}
+    }
+  }
 
-      dynamic "uri_path" {
-        for_each = redacted_fields.value.uri_path ? [1] : []
-        content {}
-      }
+  dynamic "redacted_fields" {
+    for_each = [
+      for rf in each.value.redacted_fields : rf
+      if rf.uri_path
+    ]
+    content {
+      uri_path {}
+    }
+  }
 
-      dynamic "single_header" {
-        for_each = redacted_fields.value.single_header != null ? toset(redacted_fields.value.single_header) : []
-        content {
-          name = single_header.value
-        }
+  # Redacted fields: single_header (one block per header name)
+  dynamic "redacted_fields" {
+    for_each = toset(flatten([
+      for rf in each.value.redacted_fields : rf.single_header != null ? rf.single_header : []
+    ]))
+    content {
+      single_header {
+        name = redacted_fields.value
       }
     }
   }
