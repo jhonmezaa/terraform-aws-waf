@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.1.3] - 2026-10-27
+
+### Fixed
+
+- Replace deprecated `data.aws_region.current.id` with `data.aws_region.current.region` (AWS provider v6) in `waf/8-locals.tf`
+
 ## [v1.1.2] - 2026-10-27
 
 ### Changed
@@ -13,6 +19,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Set module `required_version` to `>= 1.3` (was `~> 1.0`): the minimum real Terraform version, since variables use `optional()` object attributes with defaults (Terraform 1.3+)
 - Examples (root modules) keep pessimistic constraints: `required_version` `~> 1.3`, AWS provider `~> 6.0`
 - Update README requirements table
+
+## [v1.1.1] - 2026-02-28
+
+### Changed
+
+- Documentation only: reformat README tables (no module code changes)
+
+## [v1.1.0] - 2026-02-28
+
+### Added
+
+- `sqli_match_statement` (with `sensitivity_level`) and `xss_match_statement` support in web ACL rules and rule group rules
+
+### Fixed
+
+- Wrap all `rule.value.*` attribute accesses with `try()` so rules declared with `any` type do not fail when optional fields are omitted
+- Apply `try()` to nested statement attributes (`managed_rule_group_statement`, `rate_based_statement`, `geo_match_statement`, `ip_set_reference_statement`, `rule_group_reference_statement`)
+- Logging `redacted_fields` now emits one block per `single_header` instead of iterating multiple headers in a single block (the AWS API only allows one)
 
 ## [1.0.0] - 2026-02-27
 
