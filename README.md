@@ -217,8 +217,8 @@ module "waf" {
 
 | Name      | Version |
 | --------- | ------- |
-| terraform | ~> 1.0  |
-| aws       | ~> 6.0  |
+| terraform | >= 1.3  |
+| aws       | >= 6.0  |
 
 ## Resources
 
