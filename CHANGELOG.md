@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.1.2] - 2026-10-27
+
+### Changed
+
+- Use minimum-only version constraints in the module (`waf/`): AWS provider `~> 6.0` -> `>= 6.0`, so callers are not blocked from newer major provider versions
+- Set module `required_version` to `>= 1.3` (was `~> 1.0`): the minimum real Terraform version, since variables use `optional()` object attributes with defaults (Terraform 1.3+)
+- Examples (root modules) keep pessimistic constraints: `required_version` `~> 1.3`, AWS provider `~> 6.0`
+- Update README requirements table
+
 ## [1.0.0] - 2026-02-27
 
 ### Added
