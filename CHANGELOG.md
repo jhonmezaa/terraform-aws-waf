@@ -38,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Apply `try()` to nested statement attributes (`managed_rule_group_statement`, `rate_based_statement`, `geo_match_statement`, `ip_set_reference_statement`, `rule_group_reference_statement`)
 - Logging `redacted_fields` now emits one block per `single_header` instead of iterating multiple headers in a single block (the AWS API only allows one)
 
-## [1.0.0] - 2026-02-27
+## [v1.0.0] - 2026-02-27
 
 ### Added
 
