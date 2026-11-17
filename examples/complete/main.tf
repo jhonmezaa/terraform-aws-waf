@@ -411,6 +411,41 @@ module "waf" {
             metric_name                = "block-suspicious-uri"
             sampled_requests_enabled   = true
           }
+        },
+
+        # --- Priority 80: Block requests to dotfiles (inline regex) ---
+        {
+          name     = "block-dotfiles"
+          priority = 80
+          action   = "block"
+
+          regex_match_statement = {
+            regex_string = "^/\\.(git|env|svn|htaccess)"
+            field_to_match = {
+              uri_path = {}
+            }
+            text_transformation = [
+              {
+                priority = 0
+                type     = "URL_DECODE"
+              }
+            ]
+          }
+
+          visibility_config = {
+            cloudwatch_metrics_enabled = true
+            metric_name                = "block-dotfiles"
+            sampled_requests_enabled   = true
+          }
+        }
+      ]
+
+      # Hash the Authorization header in logs and sampled requests
+      data_protections = [
+        {
+          action     = "HASH"
+          field_type = "SINGLE_HEADER"
+          field_keys = ["authorization"]
         }
       ]
 
@@ -456,7 +491,7 @@ module "waf" {
     }
   }
 
-  tags = {
+  tags_common = {
     Environment = "production"
     Example     = "complete"
   }
