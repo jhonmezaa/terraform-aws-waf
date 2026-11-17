@@ -99,11 +99,32 @@ locals {
   # Default Tags
   # =============================================================================
 
+  # tags_common (convention) and tags (legacy, kept for backward compatibility)
+  # are merged; ManagedBy is always enforced. Name is added per resource.
   default_tags = merge(
-    {
-      "ManagedBy" = "Terraform"
-      "Module"    = "terraform-aws-waf"
-    },
-    var.tags
+    { "Module" = "terraform-aws-waf" },
+    var.tags_common,
+    var.tags,
+    { "ManagedBy" = "Terraform" }
   )
+
+  # =============================================================================
+  # Final Resource Names (AWS WAFv2 names are limited to 128 characters)
+  # =============================================================================
+
+  web_acl_names = {
+    for k, v in local.web_acls : k => substr(coalesce(v.name, "${local.resource_name}-${k}"), 0, 128)
+  }
+
+  ip_set_names = {
+    for k, v in local.ip_sets : k => substr(coalesce(v.name, "${local.resource_name}-ipset-${k}"), 0, 128)
+  }
+
+  regex_pattern_set_names = {
+    for k, v in local.regex_pattern_sets : k => substr(coalesce(v.name, "${local.resource_name}-regex-${k}"), 0, 128)
+  }
+
+  rule_group_names = {
+    for k, v in local.rule_groups : k => substr(coalesce(v.name, "${local.resource_name}-rg-${k}"), 0, 128)
+  }
 }

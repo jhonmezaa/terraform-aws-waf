@@ -5,7 +5,7 @@
 resource "aws_wafv2_rule_group" "this" {
   for_each = local.rule_groups
 
-  name        = "${local.resource_name}-rg-${each.key}"
+  name        = local.rule_group_names[each.key]
   description = each.value.description
   scope       = each.value.scope
   capacity    = each.value.capacity
@@ -35,7 +35,20 @@ resource "aws_wafv2_rule_group" "this" {
       action {
         dynamic "allow" {
           for_each = rule.value.action == "allow" ? [1] : []
-          content {}
+          content {
+            dynamic "custom_request_handling" {
+              for_each = try(rule.value.custom_request_handling, null) != null ? [rule.value.custom_request_handling] : []
+              content {
+                dynamic "insert_header" {
+                  for_each = try(custom_request_handling.value.insert_headers, [])
+                  content {
+                    name  = insert_header.value.name
+                    value = insert_header.value.value
+                  }
+                }
+              }
+            }
+          }
         }
         dynamic "block" {
           for_each = rule.value.action == "block" ? [1] : []
@@ -46,7 +59,7 @@ resource "aws_wafv2_rule_group" "this" {
                 response_code            = custom_response.value.response_code
                 custom_response_body_key = custom_response.value.custom_response_body_key
                 dynamic "response_header" {
-                  for_each = custom_response.value.response_headers != null ? custom_response.value.response_headers : []
+                  for_each = try(custom_response.value.response_headers, null) != null ? custom_response.value.response_headers : []
                   content {
                     name  = response_header.value.name
                     value = response_header.value.value
@@ -58,15 +71,54 @@ resource "aws_wafv2_rule_group" "this" {
         }
         dynamic "count" {
           for_each = rule.value.action == "count" ? [1] : []
-          content {}
+          content {
+            dynamic "custom_request_handling" {
+              for_each = try(rule.value.custom_request_handling, null) != null ? [rule.value.custom_request_handling] : []
+              content {
+                dynamic "insert_header" {
+                  for_each = try(custom_request_handling.value.insert_headers, [])
+                  content {
+                    name  = insert_header.value.name
+                    value = insert_header.value.value
+                  }
+                }
+              }
+            }
+          }
         }
         dynamic "captcha" {
           for_each = rule.value.action == "captcha" ? [1] : []
-          content {}
+          content {
+            dynamic "custom_request_handling" {
+              for_each = try(rule.value.custom_request_handling, null) != null ? [rule.value.custom_request_handling] : []
+              content {
+                dynamic "insert_header" {
+                  for_each = try(custom_request_handling.value.insert_headers, [])
+                  content {
+                    name  = insert_header.value.name
+                    value = insert_header.value.value
+                  }
+                }
+              }
+            }
+          }
         }
         dynamic "challenge" {
           for_each = rule.value.action == "challenge" ? [1] : []
-          content {}
+          content {
+            dynamic "custom_request_handling" {
+              for_each = try(rule.value.custom_request_handling, null) != null ? [rule.value.custom_request_handling] : []
+              content {
+                dynamic "insert_header" {
+                  for_each = try(custom_request_handling.value.insert_headers, [])
+                  content {
+                    name  = insert_header.value.name
+                    value = insert_header.value.value
+                  }
+                }
+              }
+            }
+          }
         }
       }
 
@@ -80,7 +132,7 @@ resource "aws_wafv2_rule_group" "this" {
             search_string         = byte_match_statement.value.search_string
 
             dynamic "field_to_match" {
-              for_each = byte_match_statement.value.field_to_match != null ? [byte_match_statement.value.field_to_match] : []
+              for_each = try(byte_match_statement.value.field_to_match, null) != null ? [byte_match_statement.value.field_to_match] : []
               content {
                 dynamic "all_query_arguments" {
                   for_each = try(field_to_match.value.all_query_arguments, null) != null ? [1] : []
@@ -187,10 +239,10 @@ resource "aws_wafv2_rule_group" "this" {
         dynamic "ip_set_reference_statement" {
           for_each = try(rule.value.ip_set_reference_statement, null) != null ? [rule.value.ip_set_reference_statement] : []
           content {
-            arn = ip_set_reference_statement.value.ip_set_key != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : ip_set_reference_statement.value.arn
+            arn = try(ip_set_reference_statement.value.ip_set_key, null) != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : try(ip_set_reference_statement.value.arn, null)
 
             dynamic "ip_set_forwarded_ip_config" {
-              for_each = ip_set_reference_statement.value.ip_set_forwarded_ip_config != null ? [ip_set_reference_statement.value.ip_set_forwarded_ip_config] : []
+              for_each = try(ip_set_reference_statement.value.ip_set_forwarded_ip_config, null) != null ? [ip_set_reference_statement.value.ip_set_forwarded_ip_config] : []
               content {
                 fallback_behavior = ip_set_forwarded_ip_config.value.fallback_behavior
                 header_name       = ip_set_forwarded_ip_config.value.header_name
@@ -207,7 +259,7 @@ resource "aws_wafv2_rule_group" "this" {
             country_codes = geo_match_statement.value.country_codes
 
             dynamic "forwarded_ip_config" {
-              for_each = geo_match_statement.value.forwarded_ip_config != null ? [geo_match_statement.value.forwarded_ip_config] : []
+              for_each = try(geo_match_statement.value.forwarded_ip_config, null) != null ? [geo_match_statement.value.forwarded_ip_config] : []
               content {
                 fallback_behavior = forwarded_ip_config.value.fallback_behavior
                 header_name       = forwarded_ip_config.value.header_name
@@ -224,7 +276,7 @@ resource "aws_wafv2_rule_group" "this" {
             size                = size_constraint_statement.value.size
 
             dynamic "field_to_match" {
-              for_each = size_constraint_statement.value.field_to_match != null ? [size_constraint_statement.value.field_to_match] : []
+              for_each = try(size_constraint_statement.value.field_to_match, null) != null ? [size_constraint_statement.value.field_to_match] : []
               content {
                 dynamic "all_query_arguments" {
                   for_each = try(field_to_match.value.all_query_arguments, null) != null ? [1] : []
@@ -277,10 +329,10 @@ resource "aws_wafv2_rule_group" "this" {
         dynamic "regex_pattern_set_reference_statement" {
           for_each = try(rule.value.regex_pattern_set_reference_statement, null) != null ? [rule.value.regex_pattern_set_reference_statement] : []
           content {
-            arn = regex_pattern_set_reference_statement.value.regex_set_key != null ? aws_wafv2_regex_pattern_set.this[regex_pattern_set_reference_statement.value.regex_set_key].arn : regex_pattern_set_reference_statement.value.arn
+            arn = try(regex_pattern_set_reference_statement.value.regex_set_key, null) != null ? aws_wafv2_regex_pattern_set.this[regex_pattern_set_reference_statement.value.regex_set_key].arn : try(regex_pattern_set_reference_statement.value.arn, null)
 
             dynamic "field_to_match" {
-              for_each = regex_pattern_set_reference_statement.value.field_to_match != null ? [regex_pattern_set_reference_statement.value.field_to_match] : []
+              for_each = try(regex_pattern_set_reference_statement.value.field_to_match, null) != null ? [regex_pattern_set_reference_statement.value.field_to_match] : []
               content {
                 dynamic "all_query_arguments" {
                   for_each = try(field_to_match.value.all_query_arguments, null) != null ? [1] : []
@@ -330,12 +382,68 @@ resource "aws_wafv2_rule_group" "this" {
           }
         }
 
+        # ===== Regex Match Statement =====
+        dynamic "regex_match_statement" {
+          for_each = try(rule.value.regex_match_statement, null) != null ? [rule.value.regex_match_statement] : []
+          content {
+            regex_string = regex_match_statement.value.regex_string
+
+            dynamic "field_to_match" {
+              for_each = try(regex_match_statement.value.field_to_match, null) != null ? [regex_match_statement.value.field_to_match] : []
+              content {
+                dynamic "all_query_arguments" {
+                  for_each = try(field_to_match.value.all_query_arguments, null) != null ? [1] : []
+                  content {}
+                }
+                dynamic "body" {
+                  for_each = try(field_to_match.value.body, null) != null ? [1] : []
+                  content {
+                    oversize_handling = try(field_to_match.value.body.oversize_handling, null)
+                  }
+                }
+                dynamic "method" {
+                  for_each = try(field_to_match.value.method, null) != null ? [1] : []
+                  content {}
+                }
+                dynamic "query_string" {
+                  for_each = try(field_to_match.value.query_string, null) != null ? [1] : []
+                  content {}
+                }
+                dynamic "single_header" {
+                  for_each = try(field_to_match.value.single_header, null) != null ? [field_to_match.value.single_header] : []
+                  content {
+                    name = single_header.value.name
+                  }
+                }
+                dynamic "single_query_argument" {
+                  for_each = try(field_to_match.value.single_query_argument, null) != null ? [field_to_match.value.single_query_argument] : []
+                  content {
+                    name = single_query_argument.value.name
+                  }
+                }
+                dynamic "uri_path" {
+                  for_each = try(field_to_match.value.uri_path, null) != null ? [1] : []
+                  content {}
+                }
+              }
+            }
+
+            dynamic "text_transformation" {
+              for_each = regex_match_statement.value.text_transformation
+              content {
+                priority = text_transformation.value.priority
+                type     = text_transformation.value.type
+              }
+            }
+          }
+        }
+
         # ===== SQLi Match Statement =====
         dynamic "sqli_match_statement" {
           for_each = try(rule.value.sqli_match_statement, null) != null ? [rule.value.sqli_match_statement] : []
           content {
             dynamic "field_to_match" {
-              for_each = sqli_match_statement.value.field_to_match != null ? [sqli_match_statement.value.field_to_match] : []
+              for_each = try(sqli_match_statement.value.field_to_match, null) != null ? [sqli_match_statement.value.field_to_match] : []
               content {
                 dynamic "all_query_arguments" {
                   for_each = try(field_to_match.value.all_query_arguments, null) != null ? [1] : []
@@ -391,7 +499,7 @@ resource "aws_wafv2_rule_group" "this" {
           for_each = try(rule.value.xss_match_statement, null) != null ? [rule.value.xss_match_statement] : []
           content {
             dynamic "field_to_match" {
-              for_each = xss_match_statement.value.field_to_match != null ? [xss_match_statement.value.field_to_match] : []
+              for_each = try(xss_match_statement.value.field_to_match, null) != null ? [xss_match_statement.value.field_to_match] : []
               content {
                 dynamic "all_query_arguments" {
                   for_each = try(field_to_match.value.all_query_arguments, null) != null ? [1] : []
@@ -477,7 +585,7 @@ resource "aws_wafv2_rule_group" "this" {
   tags = merge(
     local.default_tags,
     {
-      "Name" = "${local.resource_name}-rg-${each.key}"
+      "Name" = local.rule_group_names[each.key]
     }
   )
 }
