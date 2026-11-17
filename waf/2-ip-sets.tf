@@ -5,7 +5,7 @@
 resource "aws_wafv2_ip_set" "this" {
   for_each = local.ip_sets
 
-  name               = "${local.resource_name}-ipset-${each.key}"
+  name               = local.ip_set_names[each.key]
   description        = each.value.description
   scope              = each.value.scope
   ip_address_version = each.value.ip_address_version
@@ -14,7 +14,7 @@ resource "aws_wafv2_ip_set" "this" {
   tags = merge(
     local.default_tags,
     {
-      "Name" = "${local.resource_name}-ipset-${each.key}"
+      "Name" = local.ip_set_names[each.key]
     }
   )
 }

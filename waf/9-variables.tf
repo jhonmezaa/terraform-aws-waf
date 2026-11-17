@@ -14,12 +14,12 @@ variable "account_name" {
 
   validation {
     condition     = length(var.account_name) > 0 && length(var.account_name) <= 32
-    error_message = "account_name must be between 1 and 32 characters."
+    error_message = "account_name debe tener entre 1 y 32 caracteres."
   }
 
   validation {
     condition     = can(regex("^[a-z0-9-]+$", var.account_name))
-    error_message = "account_name can only contain lowercase letters, numbers, and hyphens."
+    error_message = "account_name solo puede contener letras minúsculas, números y guiones."
   }
 }
 
@@ -29,12 +29,12 @@ variable "project_name" {
 
   validation {
     condition     = length(var.project_name) > 0 && length(var.project_name) <= 32
-    error_message = "project_name must be between 1 and 32 characters."
+    error_message = "project_name debe tener entre 1 y 32 caracteres."
   }
 
   validation {
     condition     = can(regex("^[a-z0-9-]+$", var.project_name))
-    error_message = "project_name can only contain lowercase letters, numbers, and hyphens."
+    error_message = "project_name solo puede contener letras minúsculas, números y guiones."
   }
 }
 
@@ -50,8 +50,14 @@ variable "use_region_prefix" {
   default     = true
 }
 
+variable "tags_common" {
+  description = "Common tags applied to all resources (naming convention standard)."
+  type        = map(string)
+  default     = {}
+}
+
 variable "tags" {
-  description = "Additional tags to apply to all resources."
+  description = "Additional tags to apply to all resources. Kept for backward compatibility; merged after tags_common."
   type        = map(string)
   default     = {}
 }
@@ -67,12 +73,21 @@ variable "web_acls" {
   EOT
 
   type = map(object({
+    name                            = optional(string)
     scope                           = optional(string, "REGIONAL")
     description                     = optional(string, "Managed by Terraform")
     default_action                  = optional(string, "block")
     default_block_response_code     = optional(number)
     default_block_response_body_key = optional(string)
-    token_domains                   = optional(list(string))
+    default_block_response_headers = optional(list(object({
+      name  = string
+      value = string
+    })), [])
+    default_allow_insert_headers = optional(list(object({
+      name  = string
+      value = string
+    })), [])
+    token_domains = optional(list(string))
 
     custom_response_body = optional(map(object({
       content      = string
@@ -104,6 +119,16 @@ variable "web_acls" {
         default_size_inspection_limit = string
       })))
     }))
+
+    # Data protection: field_type is one of SINGLE_HEADER, SINGLE_COOKIE,
+    # SINGLE_QUERY_ARGUMENT, QUERY_STRING, BODY; action is SUBSTITUTION or HASH.
+    data_protections = optional(list(object({
+      action                     = string
+      field_type                 = string
+      field_keys                 = optional(list(string))
+      exclude_rate_based_details = optional(bool)
+      exclude_rule_match_details = optional(bool)
+    })), [])
   }))
 
   default = {}
@@ -112,14 +137,25 @@ variable "web_acls" {
     condition = alltrue([
       for k, v in var.web_acls : contains(["REGIONAL", "CLOUDFRONT"], v.scope)
     ])
-    error_message = "Web ACL scope must be either 'REGIONAL' or 'CLOUDFRONT'."
+    error_message = "El scope del Web ACL debe ser 'REGIONAL' o 'CLOUDFRONT'."
   }
 
   validation {
     condition = alltrue([
       for k, v in var.web_acls : contains(["allow", "block"], v.default_action)
     ])
-    error_message = "Web ACL default_action must be either 'allow' or 'block'."
+    error_message = "default_action del Web ACL debe ser 'allow' o 'block'."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for k, v in var.web_acls : [
+        for dp in v.data_protections :
+        contains(["SUBSTITUTION", "HASH"], dp.action) &&
+        contains(["SINGLE_HEADER", "SINGLE_COOKIE", "SINGLE_QUERY_ARGUMENT", "QUERY_STRING", "BODY"], dp.field_type)
+      ]
+    ]))
+    error_message = "data_protections: action debe ser 'SUBSTITUTION' o 'HASH' y field_type uno de SINGLE_HEADER, SINGLE_COOKIE, SINGLE_QUERY_ARGUMENT, QUERY_STRING, BODY."
   }
 }
 
@@ -134,6 +170,7 @@ variable "ip_sets" {
   EOT
 
   type = map(object({
+    name               = optional(string)
     scope              = optional(string, "REGIONAL")
     description        = optional(string, "Managed by Terraform")
     ip_address_version = optional(string, "IPV4")
@@ -146,14 +183,14 @@ variable "ip_sets" {
     condition = alltrue([
       for k, v in var.ip_sets : contains(["REGIONAL", "CLOUDFRONT"], v.scope)
     ])
-    error_message = "IP set scope must be either 'REGIONAL' or 'CLOUDFRONT'."
+    error_message = "El scope del IP set debe ser 'REGIONAL' o 'CLOUDFRONT'."
   }
 
   validation {
     condition = alltrue([
       for k, v in var.ip_sets : contains(["IPV4", "IPV6"], v.ip_address_version)
     ])
-    error_message = "IP set ip_address_version must be either 'IPV4' or 'IPV6'."
+    error_message = "ip_address_version del IP set debe ser 'IPV4' o 'IPV6'."
   }
 }
 
@@ -168,6 +205,7 @@ variable "regex_pattern_sets" {
   EOT
 
   type = map(object({
+    name               = optional(string)
     scope              = optional(string, "REGIONAL")
     description        = optional(string, "Managed by Terraform")
     regular_expression = list(string)
@@ -179,7 +217,7 @@ variable "regex_pattern_sets" {
     condition = alltrue([
       for k, v in var.regex_pattern_sets : contains(["REGIONAL", "CLOUDFRONT"], v.scope)
     ])
-    error_message = "Regex pattern set scope must be either 'REGIONAL' or 'CLOUDFRONT'."
+    error_message = "El scope del regex pattern set debe ser 'REGIONAL' o 'CLOUDFRONT'."
   }
 }
 
@@ -194,6 +232,7 @@ variable "rule_groups" {
   EOT
 
   type = map(object({
+    name        = optional(string)
     scope       = optional(string, "REGIONAL")
     description = optional(string, "Managed by Terraform")
     capacity    = number
@@ -214,6 +253,20 @@ variable "rule_groups" {
   }))
 
   default = {}
+
+  validation {
+    condition = alltrue([
+      for k, v in var.rule_groups : contains(["REGIONAL", "CLOUDFRONT"], v.scope)
+    ])
+    error_message = "El scope del rule group debe ser 'REGIONAL' o 'CLOUDFRONT'."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.rule_groups : v.capacity >= 1
+    ])
+    error_message = "capacity del rule group debe ser mayor o igual a 1."
+  }
 }
 
 # =============================================================================
@@ -255,6 +308,28 @@ variable "logging_configurations" {
   }))
 
   default = {}
+
+  validation {
+    condition = alltrue([
+      for k, v in var.logging_configurations :
+      length(v.log_destination_arns) >= 1 && length(v.log_destination_arns) <= 8 && alltrue([for arn in v.log_destination_arns : length(regexall("aws-waf-logs-", arn)) > 0])
+    ])
+    error_message = "Cada logging configuration necesita entre 1 y 8 destinos y cada ARN debe referenciar un recurso cuyo nombre empiece por 'aws-waf-logs-'."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.logging_configurations :
+      v.logging_filter == null ? true : (
+        contains(["KEEP", "DROP"], v.logging_filter.default_behavior) &&
+        alltrue([
+          for f in v.logging_filter.filter :
+          contains(["KEEP", "DROP"], f.behavior) && contains(["MEETS_ALL", "MEETS_ANY"], f.requirement) && length(f.condition) >= 1
+        ])
+      )
+    ])
+    error_message = "logging_filter: default_behavior y behavior deben ser 'KEEP' o 'DROP', requirement 'MEETS_ALL' o 'MEETS_ANY', y cada filtro necesita al menos una condición."
+  }
 }
 
 # =============================================================================

@@ -5,7 +5,7 @@
 resource "aws_wafv2_regex_pattern_set" "this" {
   for_each = local.regex_pattern_sets
 
-  name        = "${local.resource_name}-regex-${each.key}"
+  name        = local.regex_pattern_set_names[each.key]
   description = each.value.description
   scope       = each.value.scope
 
@@ -20,7 +20,7 @@ resource "aws_wafv2_regex_pattern_set" "this" {
   tags = merge(
     local.default_tags,
     {
-      "Name" = "${local.resource_name}-regex-${each.key}"
+      "Name" = local.regex_pattern_set_names[each.key]
     }
   )
 }

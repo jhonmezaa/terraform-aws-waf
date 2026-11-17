@@ -5,7 +5,7 @@
 resource "aws_wafv2_web_acl" "this" {
   for_each = local.web_acls
 
-  name          = "${local.resource_name}-${each.key}"
+  name          = local.web_acl_names[each.key]
   description   = each.value.description
   scope         = each.value.scope
   token_domains = each.value.token_domains
@@ -17,7 +17,20 @@ resource "aws_wafv2_web_acl" "this" {
   default_action {
     dynamic "allow" {
       for_each = each.value.default_action == "allow" ? [1] : []
-      content {}
+      content {
+        dynamic "custom_request_handling" {
+          for_each = length(each.value.default_allow_insert_headers) > 0 ? [1] : []
+          content {
+            dynamic "insert_header" {
+              for_each = each.value.default_allow_insert_headers
+              content {
+                name  = insert_header.value.name
+                value = insert_header.value.value
+              }
+            }
+          }
+        }
+      }
     }
 
     dynamic "block" {
@@ -28,6 +41,14 @@ resource "aws_wafv2_web_acl" "this" {
           content {
             response_code            = each.value.default_block_response_code
             custom_response_body_key = each.value.default_block_response_body_key
+
+            dynamic "response_header" {
+              for_each = each.value.default_block_response_headers
+              content {
+                name  = response_header.value.name
+                value = response_header.value.value
+              }
+            }
           }
         }
       }
@@ -70,6 +91,29 @@ resource "aws_wafv2_web_acl" "this" {
     content {
       immunity_time_property {
         immunity_time = challenge_config.value.immunity_time
+      }
+    }
+  }
+
+  # =========================================================================
+  # Data Protection Config (obfuscate sensitive fields in logs/sampled requests)
+  # =========================================================================
+
+  dynamic "data_protection_config" {
+    for_each = length(each.value.data_protections) > 0 ? [1] : []
+    content {
+      dynamic "data_protection" {
+        for_each = each.value.data_protections
+        content {
+          action                     = data_protection.value.action
+          exclude_rate_based_details = data_protection.value.exclude_rate_based_details
+          exclude_rule_match_details = data_protection.value.exclude_rule_match_details
+
+          field {
+            field_type = data_protection.value.field_type
+            field_keys = data_protection.value.field_keys
+          }
+        }
       }
     }
   }
@@ -136,7 +180,20 @@ resource "aws_wafv2_web_acl" "this" {
         content {
           dynamic "allow" {
             for_each = action.value == "allow" ? [1] : []
-            content {}
+            content {
+              dynamic "custom_request_handling" {
+                for_each = try(rule.value.custom_request_handling, null) != null ? [rule.value.custom_request_handling] : []
+                content {
+                  dynamic "insert_header" {
+                    for_each = try(custom_request_handling.value.insert_headers, [])
+                    content {
+                      name  = insert_header.value.name
+                      value = insert_header.value.value
+                    }
+                  }
+                }
+              }
+            }
           }
           dynamic "block" {
             for_each = action.value == "block" ? [1] : []
@@ -147,7 +204,7 @@ resource "aws_wafv2_web_acl" "this" {
                   response_code            = custom_response.value.response_code
                   custom_response_body_key = custom_response.value.custom_response_body_key
                   dynamic "response_header" {
-                    for_each = custom_response.value.response_headers != null ? custom_response.value.response_headers : []
+                    for_each = try(custom_response.value.response_headers, null) != null ? custom_response.value.response_headers : []
                     content {
                       name  = response_header.value.name
                       value = response_header.value.value
@@ -159,15 +216,54 @@ resource "aws_wafv2_web_acl" "this" {
           }
           dynamic "count" {
             for_each = action.value == "count" ? [1] : []
-            content {}
+            content {
+              dynamic "custom_request_handling" {
+                for_each = try(rule.value.custom_request_handling, null) != null ? [rule.value.custom_request_handling] : []
+                content {
+                  dynamic "insert_header" {
+                    for_each = try(custom_request_handling.value.insert_headers, [])
+                    content {
+                      name  = insert_header.value.name
+                      value = insert_header.value.value
+                    }
+                  }
+                }
+              }
+            }
           }
           dynamic "captcha" {
             for_each = action.value == "captcha" ? [1] : []
-            content {}
+            content {
+              dynamic "custom_request_handling" {
+                for_each = try(rule.value.custom_request_handling, null) != null ? [rule.value.custom_request_handling] : []
+                content {
+                  dynamic "insert_header" {
+                    for_each = try(custom_request_handling.value.insert_headers, [])
+                    content {
+                      name  = insert_header.value.name
+                      value = insert_header.value.value
+                    }
+                  }
+                }
+              }
+            }
           }
           dynamic "challenge" {
             for_each = action.value == "challenge" ? [1] : []
-            content {}
+            content {
+              dynamic "custom_request_handling" {
+                for_each = try(rule.value.custom_request_handling, null) != null ? [rule.value.custom_request_handling] : []
+                content {
+                  dynamic "insert_header" {
+                    for_each = try(custom_request_handling.value.insert_headers, [])
+                    content {
+                      name  = insert_header.value.name
+                      value = insert_header.value.value
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -408,7 +504,7 @@ resource "aws_wafv2_web_acl" "this" {
                 dynamic "ip_set_reference_statement" {
                   for_each = try(scope_down_statement.value.ip_set_reference_statement, null) != null ? [scope_down_statement.value.ip_set_reference_statement] : []
                   content {
-                    arn = try(ip_set_reference_statement.value.ip_set_key, null) != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : ip_set_reference_statement.value.arn
+                    arn = try(ip_set_reference_statement.value.ip_set_key, null) != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : try(ip_set_reference_statement.value.arn, null)
                   }
                 }
 
@@ -468,7 +564,7 @@ resource "aws_wafv2_web_acl" "this" {
         dynamic "ip_set_reference_statement" {
           for_each = try(rule.value.ip_set_reference_statement, null) != null ? [rule.value.ip_set_reference_statement] : []
           content {
-            arn = ip_set_reference_statement.value.ip_set_key != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : ip_set_reference_statement.value.arn
+            arn = try(ip_set_reference_statement.value.ip_set_key, null) != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : try(ip_set_reference_statement.value.arn, null)
 
             dynamic "ip_set_forwarded_ip_config" {
               for_each = try(ip_set_reference_statement.value.ip_set_forwarded_ip_config, null) != null ? [ip_set_reference_statement.value.ip_set_forwarded_ip_config] : []
@@ -486,7 +582,7 @@ resource "aws_wafv2_web_acl" "this" {
           for_each = try(rule.value.rate_based_statement, null) != null ? [rule.value.rate_based_statement] : []
           content {
             limit                 = rate_based_statement.value.limit
-            aggregate_key_type    = rate_based_statement.value.aggregate_key_type
+            aggregate_key_type    = try(rate_based_statement.value.aggregate_key_type, "IP")
             evaluation_window_sec = try(rate_based_statement.value.evaluation_window_sec, null)
 
             dynamic "forwarded_ip_config" {
@@ -617,7 +713,7 @@ resource "aws_wafv2_web_acl" "this" {
                 dynamic "ip_set_reference_statement" {
                   for_each = try(scope_down_statement.value.ip_set_reference_statement, null) != null ? [scope_down_statement.value.ip_set_reference_statement] : []
                   content {
-                    arn = try(ip_set_reference_statement.value.ip_set_key, null) != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : ip_set_reference_statement.value.arn
+                    arn = try(ip_set_reference_statement.value.ip_set_key, null) != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : try(ip_set_reference_statement.value.arn, null)
                   }
                 }
               }
@@ -633,7 +729,7 @@ resource "aws_wafv2_web_acl" "this" {
             search_string         = byte_match_statement.value.search_string
 
             dynamic "field_to_match" {
-              for_each = byte_match_statement.value.field_to_match != null ? [byte_match_statement.value.field_to_match] : []
+              for_each = try(byte_match_statement.value.field_to_match, null) != null ? [byte_match_statement.value.field_to_match] : []
               content {
                 dynamic "all_query_arguments" {
                   for_each = try(field_to_match.value.all_query_arguments, null) != null ? [1] : []
@@ -744,7 +840,7 @@ resource "aws_wafv2_web_acl" "this" {
             size                = size_constraint_statement.value.size
 
             dynamic "field_to_match" {
-              for_each = size_constraint_statement.value.field_to_match != null ? [size_constraint_statement.value.field_to_match] : []
+              for_each = try(size_constraint_statement.value.field_to_match, null) != null ? [size_constraint_statement.value.field_to_match] : []
               content {
                 dynamic "all_query_arguments" {
                   for_each = try(field_to_match.value.all_query_arguments, null) != null ? [1] : []
@@ -813,10 +909,10 @@ resource "aws_wafv2_web_acl" "this" {
         dynamic "regex_pattern_set_reference_statement" {
           for_each = try(rule.value.regex_pattern_set_reference_statement, null) != null ? [rule.value.regex_pattern_set_reference_statement] : []
           content {
-            arn = regex_pattern_set_reference_statement.value.regex_set_key != null ? aws_wafv2_regex_pattern_set.this[regex_pattern_set_reference_statement.value.regex_set_key].arn : regex_pattern_set_reference_statement.value.arn
+            arn = try(regex_pattern_set_reference_statement.value.regex_set_key, null) != null ? aws_wafv2_regex_pattern_set.this[regex_pattern_set_reference_statement.value.regex_set_key].arn : try(regex_pattern_set_reference_statement.value.arn, null)
 
             dynamic "field_to_match" {
-              for_each = regex_pattern_set_reference_statement.value.field_to_match != null ? [regex_pattern_set_reference_statement.value.field_to_match] : []
+              for_each = try(regex_pattern_set_reference_statement.value.field_to_match, null) != null ? [regex_pattern_set_reference_statement.value.field_to_match] : []
               content {
                 dynamic "all_query_arguments" {
                   for_each = try(field_to_match.value.all_query_arguments, null) != null ? [1] : []
@@ -867,7 +963,7 @@ resource "aws_wafv2_web_acl" "this" {
         dynamic "rule_group_reference_statement" {
           for_each = try(rule.value.rule_group_reference_statement, null) != null ? [rule.value.rule_group_reference_statement] : []
           content {
-            arn = rule_group_reference_statement.value.rule_group_key != null ? aws_wafv2_rule_group.this[rule_group_reference_statement.value.rule_group_key].arn : rule_group_reference_statement.value.arn
+            arn = try(rule_group_reference_statement.value.rule_group_key, null) != null ? aws_wafv2_rule_group.this[rule_group_reference_statement.value.rule_group_key].arn : try(rule_group_reference_statement.value.arn, null)
 
             dynamic "rule_action_override" {
               for_each = try(rule_group_reference_statement.value.rule_action_overrides, null) != null ? {
@@ -911,12 +1007,86 @@ resource "aws_wafv2_web_acl" "this" {
           }
         }
 
+        # ===== Regex Match Statement =====
+        dynamic "regex_match_statement" {
+          for_each = try(rule.value.regex_match_statement, null) != null ? [rule.value.regex_match_statement] : []
+          content {
+            regex_string = regex_match_statement.value.regex_string
+
+            dynamic "field_to_match" {
+              for_each = try(regex_match_statement.value.field_to_match, null) != null ? [regex_match_statement.value.field_to_match] : []
+              content {
+                dynamic "all_query_arguments" {
+                  for_each = try(field_to_match.value.all_query_arguments, null) != null ? [1] : []
+                  content {}
+                }
+                dynamic "body" {
+                  for_each = try(field_to_match.value.body, null) != null ? [1] : []
+                  content {
+                    oversize_handling = try(field_to_match.value.body.oversize_handling, null)
+                  }
+                }
+                dynamic "method" {
+                  for_each = try(field_to_match.value.method, null) != null ? [1] : []
+                  content {}
+                }
+                dynamic "query_string" {
+                  for_each = try(field_to_match.value.query_string, null) != null ? [1] : []
+                  content {}
+                }
+                dynamic "single_header" {
+                  for_each = try(field_to_match.value.single_header, null) != null ? [field_to_match.value.single_header] : []
+                  content {
+                    name = single_header.value.name
+                  }
+                }
+                dynamic "single_query_argument" {
+                  for_each = try(field_to_match.value.single_query_argument, null) != null ? [field_to_match.value.single_query_argument] : []
+                  content {
+                    name = single_query_argument.value.name
+                  }
+                }
+                dynamic "uri_path" {
+                  for_each = try(field_to_match.value.uri_path, null) != null ? [1] : []
+                  content {}
+                }
+                dynamic "json_body" {
+                  for_each = try(field_to_match.value.json_body, null) != null ? [field_to_match.value.json_body] : []
+                  content {
+                    match_scope               = json_body.value.match_scope
+                    invalid_fallback_behavior = try(json_body.value.invalid_fallback_behavior, null)
+                    oversize_handling         = try(json_body.value.oversize_handling, null)
+                    dynamic "match_pattern" {
+                      for_each = [json_body.value.match_pattern]
+                      content {
+                        dynamic "all" {
+                          for_each = try(match_pattern.value.all, null) != null ? [1] : []
+                          content {}
+                        }
+                        included_paths = try(match_pattern.value.included_paths, null)
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            dynamic "text_transformation" {
+              for_each = regex_match_statement.value.text_transformation
+              content {
+                priority = text_transformation.value.priority
+                type     = text_transformation.value.type
+              }
+            }
+          }
+        }
+
         # ===== SQLi Match Statement =====
         dynamic "sqli_match_statement" {
           for_each = try(rule.value.sqli_match_statement, null) != null ? [rule.value.sqli_match_statement] : []
           content {
             dynamic "field_to_match" {
-              for_each = sqli_match_statement.value.field_to_match != null ? [sqli_match_statement.value.field_to_match] : []
+              for_each = try(sqli_match_statement.value.field_to_match, null) != null ? [sqli_match_statement.value.field_to_match] : []
               content {
                 dynamic "all_query_arguments" {
                   for_each = try(field_to_match.value.all_query_arguments, null) != null ? [1] : []
@@ -990,7 +1160,7 @@ resource "aws_wafv2_web_acl" "this" {
           for_each = try(rule.value.xss_match_statement, null) != null ? [rule.value.xss_match_statement] : []
           content {
             dynamic "field_to_match" {
-              for_each = xss_match_statement.value.field_to_match != null ? [xss_match_statement.value.field_to_match] : []
+              for_each = try(xss_match_statement.value.field_to_match, null) != null ? [xss_match_statement.value.field_to_match] : []
               content {
                 dynamic "all_query_arguments" {
                   for_each = try(field_to_match.value.all_query_arguments, null) != null ? [1] : []
@@ -1127,7 +1297,7 @@ resource "aws_wafv2_web_acl" "this" {
                 dynamic "ip_set_reference_statement" {
                   for_each = try(statement.value.ip_set_reference_statement, null) != null ? [statement.value.ip_set_reference_statement] : []
                   content {
-                    arn = try(ip_set_reference_statement.value.ip_set_key, null) != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : ip_set_reference_statement.value.arn
+                    arn = try(ip_set_reference_statement.value.ip_set_key, null) != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : try(ip_set_reference_statement.value.arn, null)
                   }
                 }
 
@@ -1184,7 +1354,7 @@ resource "aws_wafv2_web_acl" "this" {
                       dynamic "ip_set_reference_statement" {
                         for_each = try(not_statement.value.statement.ip_set_reference_statement, null) != null ? [not_statement.value.statement.ip_set_reference_statement] : []
                         content {
-                          arn = try(ip_set_reference_statement.value.ip_set_key, null) != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : ip_set_reference_statement.value.arn
+                          arn = try(ip_set_reference_statement.value.ip_set_key, null) != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : try(ip_set_reference_statement.value.arn, null)
                         }
                       }
                       dynamic "byte_match_statement" {
@@ -1287,7 +1457,7 @@ resource "aws_wafv2_web_acl" "this" {
                 dynamic "ip_set_reference_statement" {
                   for_each = try(statement.value.ip_set_reference_statement, null) != null ? [statement.value.ip_set_reference_statement] : []
                   content {
-                    arn = try(ip_set_reference_statement.value.ip_set_key, null) != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : ip_set_reference_statement.value.arn
+                    arn = try(ip_set_reference_statement.value.ip_set_key, null) != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : try(ip_set_reference_statement.value.arn, null)
                   }
                 }
 
@@ -1360,7 +1530,7 @@ resource "aws_wafv2_web_acl" "this" {
               dynamic "ip_set_reference_statement" {
                 for_each = try(not_statement.value.statement.ip_set_reference_statement, null) != null ? [not_statement.value.statement.ip_set_reference_statement] : []
                 content {
-                  arn = try(ip_set_reference_statement.value.ip_set_key, null) != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : ip_set_reference_statement.value.arn
+                  arn = try(ip_set_reference_statement.value.ip_set_key, null) != null ? aws_wafv2_ip_set.this[ip_set_reference_statement.value.ip_set_key].arn : try(ip_set_reference_statement.value.arn, null)
                 }
               }
 
@@ -1458,7 +1628,7 @@ resource "aws_wafv2_web_acl" "this" {
   tags = merge(
     local.default_tags,
     {
-      "Name" = "${local.resource_name}-${each.key}"
+      "Name" = local.web_acl_names[each.key]
     }
   )
 }
