@@ -5,12 +5,14 @@ Production-ready Terraform module for AWS WAFv2. Supports Web ACLs, IP Sets, Reg
 ## Features
 
 - **Web ACLs** with REGIONAL and CLOUDFRONT scope
-- **All rule statement types**: managed rules, IP set, rate-based, byte match, size constraint, geo match, regex, rule group reference, label match
+- **All common rule statement types**: managed rules, IP set, rate-based, byte match, size constraint, geo match, regex pattern set, inline regex match, SQLi, XSS, rule group reference, label match
 - **Rule composition**: AND, OR, NOT statements for complex rule logic
 - **IP Sets** for IPv4 and IPv6 with cross-reference support
 - **Regex Pattern Sets** with cross-reference support
 - **Custom Rule Groups** with configurable WCU capacity
 - **Logging** to CloudWatch, S3, or Kinesis Firehose with field redaction and filtering
+- **Data protection** (`data_protections`) to hash or substitute sensitive fields in logs and sampled requests
+- **Custom request/response handling**: inserted headers on allow/count/captcha/challenge, response headers on block
 - **Associations** for ALB, API Gateway, AppSync, Cognito, App Runner, Verified Access
 - **Cross-resource references** via `ip_set_key`, `regex_set_key`, `rule_group_key`, `web_acl_key`
 - **29-region prefix map** with configurable naming
@@ -22,7 +24,7 @@ Production-ready Terraform module for AWS WAFv2. Supports Web ACLs, IP Sets, Reg
 
 ```hcl
 module "waf" {
-  source = "./terraform-aws-waf/waf"
+  source = "github.com/jhonmezaa/terraform-aws-waf//waf?ref=v1.2.0"
 
   account_name = "prod"
   project_name = "myapp"
@@ -77,7 +79,7 @@ module "waf" {
 
 ```hcl
 module "waf" {
-  source = "./terraform-aws-waf/waf"
+  source = "github.com/jhonmezaa/terraform-aws-waf//waf?ref=v1.2.0"
 
   account_name = "prod"
   project_name = "myapp"
@@ -242,13 +244,39 @@ module "waf" {
 | `project_name`      | Project name for resource naming  | `string`      | -       | yes      |
 | `region_prefix`     | Region prefix override            | `string`      | `null`  | no       |
 | `use_region_prefix` | Include region prefix in names    | `bool`        | `true`  | no       |
-| `tags`              | Additional tags for all resources | `map(string)` | `{}`    | no       |
+| `tags_common`       | Common tags for all resources     | `map(string)` | `{}`    | no       |
+| `tags`              | Additional tags (legacy, merged after `tags_common`) | `map(string)` | `{}`    | no       |
 
 ### Web ACLs
 
 | Name       | Description                   | Type                 | Default |
 | ---------- | ----------------------------- | -------------------- | ------- |
 | `web_acls` | Map of Web ACL configurations | `map(object({...}))` | `{}`    |
+
+Main attributes of each `web_acls` entry:
+
+| Attribute                         | Description                                                                 | Default                |
+| --------------------------------- | --------------------------------------------------------------------------- | ---------------------- |
+| `name`                            | Explicit name override (otherwise generated)                                | `null`                 |
+| `scope`                           | `REGIONAL` or `CLOUDFRONT`                                                  | `"REGIONAL"`           |
+| `description`                     | Description                                                                 | `"Managed by Terraform"` |
+| `default_action`                  | `allow` or `block`                                                          | `"block"`              |
+| `default_block_response_code`     | Custom response code when `default_action = "block"`                       | `null`                 |
+| `default_block_response_body_key` | Key in `custom_response_body` for the default block response               | `null`                 |
+| `default_block_response_headers`  | List of `{ name, value }` response headers for the default block response  | `[]`                   |
+| `default_allow_insert_headers`    | List of `{ name, value }` headers inserted when `default_action = "allow"` | `[]`                   |
+| `token_domains`                   | Token domains for CAPTCHA/challenge                                         | `null`                 |
+| `custom_response_body`            | Map of custom response bodies (`content`, `content_type`)                   | `{}`                   |
+| `rules`                           | List of rules (see statement types below)                                   | `[]`                   |
+| `visibility_config`               | ACL-level metrics configuration                                             | required               |
+| `captcha_config`                  | `{ immunity_time }`                                                         | `null`                 |
+| `challenge_config`                | `{ immunity_time }`                                                         | `null`                 |
+| `association_config`              | Request body inspection limits per resource type                            | `null`                 |
+| `data_protections`                | List of `{ action, field_type, field_keys, exclude_rate_based_details, exclude_rule_match_details }` | `[]` |
+
+Rule-level options (in addition to the statement): `action` or `override_action`, `custom_response` (block),
+`custom_request_handling = { insert_headers = [{ name, value }] }` (allow/count/captcha/challenge),
+`rule_labels`, `captcha_config`, `challenge_config` and `visibility_config`.
 
 ### IP Sets
 
@@ -303,8 +331,15 @@ module "waf" {
 All resources follow the standard naming pattern:
 
 ```
-{region_prefix}-waf-{resource_type}-{account_name}-{project_name}-{key}
+{region_prefix}-waf-{account_name}-{project_name}[-{type}]-{key}
 ```
+
+Every map entry (`web_acls`, `ip_sets`, `regex_pattern_sets`, `rule_groups`) accepts an optional `name`
+attribute that overrides the generated name. Names are truncated to 128 characters (AWS WAFv2 limit).
+With `use_region_prefix = false` the `{region_prefix}-` part is omitted.
+
+Tags applied to every resource: `merge(tags_common, tags, { Name = <name>, ManagedBy = "Terraform" })`
+plus `Module = "terraform-aws-waf"`.
 
 | Resource   | Pattern                                        | Example                                |
 | ---------- | ---------------------------------------------- | -------------------------------------- |
@@ -326,6 +361,9 @@ All resources follow the standard naming pattern:
 | `regex_pattern_set_reference_statement` | Yes     | Yes        | Match regex patterns              |
 | `rule_group_reference_statement`        | Yes     | No         | Reference custom rule groups      |
 | `label_match_statement`                 | Yes     | Yes        | Match by labels                   |
+| `regex_match_statement`                 | Yes     | Yes        | Match an inline regex             |
+| `sqli_match_statement`                  | Yes     | Yes        | Detect SQL injection              |
+| `xss_match_statement`                   | Yes     | Yes        | Detect cross-site scripting       |
 | `and_statement`                         | Yes     | No         | Combine with AND                  |
 | `or_statement`                          | Yes     | No         | Combine with OR                   |
 | `not_statement`                         | Yes     | No         | Negate a statement                |

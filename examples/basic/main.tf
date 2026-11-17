@@ -82,7 +82,7 @@ module "waf" {
     }
   }
 
-  tags = {
+  tags_common = {
     Environment = "production"
     Example     = "basic"
   }

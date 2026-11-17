@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.2.0] - 2026-11-17
+
+### Added
+
+- `tags_common` variable (project naming convention); merged before the existing `tags` variable
+- Optional `name` override on `web_acls`, `ip_sets`, `regex_pattern_sets` and `rule_groups` entries (generated names are unchanged when omitted); names are truncated to the 128-character AWS limit
+- `regex_match_statement` (inline regex) in web ACL rules and rule group rules
+- `data_protections` on `web_acls` (`data_protection_config`: HASH/SUBSTITUTION of headers, cookies, query arguments, query string or body in logs and sampled requests)
+- `default_block_response_headers` and `default_allow_insert_headers` for the web ACL default action
+- Rule-level `custom_request_handling` (`insert_headers`) for `allow`, `count`, `captcha` and `challenge` actions, in web ACLs and rule groups
+- Validations: `rule_groups` scope and capacity, `logging_configurations` destinations (1 to 8, `aws-waf-logs-` prefix) and `logging_filter` values, `data_protections` action/field type
+- README: per-attribute documentation of `web_acls`, `tags_common`, statement table with SQLi/XSS/regex match
+
+### Fixed
+
+- Optional rule attributes (`ip_set_key`/`arn`, `regex_set_key`, `rule_group_key`, `field_to_match`, `forwarded_ip_config`, `ip_set_forwarded_ip_config`, `custom_response.response_headers`, `rate_based_statement.aggregate_key_type`) no longer fail with "Unsupported attribute" when omitted from a rule; `aggregate_key_type` defaults to `IP`
+- Validation error messages are now in Spanish, per the project convention
+- README naming convention pattern now matches the generated names; `source` uses the GitHub URL with `?ref=`
+- Example READMEs no longer reference a non-existent `terraform.tfvars.example`
+
+### Changed
+
+- Examples use `tags_common` instead of `tags`; the complete example adds an inline regex rule and a data protection setting
+
+### Upgrade notes
+
+- No resource is renamed or recreated: generated names are identical to v1.1.4 when `name` is not set.
+- `ManagedBy = "Terraform"` is now always enforced and can no longer be overridden through `tags`; if you set `ManagedBy` in `tags`, the tag value will change on the next apply (in-place update).
+
 ## [v1.1.4] - 2026-10-27
 
 ### Changed

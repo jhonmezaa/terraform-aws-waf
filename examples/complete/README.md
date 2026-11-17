@@ -15,6 +15,8 @@ This example demonstrates all features of the WAF module:
   - Custom rule group reference (priority 50)
   - Rate limiting at 2000 req/5min (priority 60)
   - URI path traversal blocking (priority 70)
+  - Inline regex dotfile blocking with `regex_match_statement` (priority 80)
+- **Data protection**: `authorization` header hashed in logs and sampled requests
 - **Custom response bodies**: JSON error responses for blocked and rate-limited requests
 - **Logging to CloudWatch**: With field redaction and filtering
 - **Cross-resource references**: Using `ip_set_key`, `regex_set_key`, and `rule_group_key`
@@ -22,8 +24,6 @@ This example demonstrates all features of the WAF module:
 ## Usage
 
 ```bash
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your values
 terraform init
 terraform plan
 terraform apply
